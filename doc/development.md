@@ -65,3 +65,48 @@ flutter test
 【已验证：执行证据】使用 `Get-Command` 检查 PATH：Git 与 Python 可发现，`flutter` 和 `dart` 均不可发现。没有安装 SDK、解析依赖、运行应用、构建、分析器或 Flutter 测试；不以静态阅读代替这些检查。
 
 文档相对链接、源码路径、占位内容、变更范围及空白检查的结果记录在[索引的交付检查](README.md#交付检查)。首轮分析阶段未执行提交、推送、创建 PR、远程工作流或漫画源／WebDAV 账户访问；后续按用户授权配置的 Fork 与 `dev` 分支见[协作仓库与分支](README.md#协作仓库与分支)。
+
+## 本机 Android 真机环境（2026-11-16）
+
+【已验证：执行证据】按用户确认的最小方案安装，工具实际存放在 `E:\Program Files\AndroidDev`。`E:\AndroidDev` 是指向该目录的 NTFS Junction，用于 Android/NDK 的无空格路径访问，不是第二份安装。未安装 Android Studio、模拟器或系统镜像。
+
+| 组件 | 已配置版本／位置 |
+| --- | --- |
+| Flutter / Dart | Flutter 3.41.6（官方 Git 标签固定版本）、Dart 3.11.4；`E:\Program Files\AndroidDev\flutter` |
+| Android 命令行工具 | 22.0；`AndroidDev\android-sdk\cmdline-tools\latest` |
+| SDK 平台／Build-Tools | API 31～36，Build-Tools 35.0.0；`AndroidDev\android-sdk\platforms`、`build-tools`；平台版本对应当前锁定插件各自的 compileSdk，不包含模拟器系统镜像 |
+| ADB | Platform-Tools 37.0.0；复制复用用户已有 E 盘工具，保留原目录；本环境入口为 `AndroidDev\android-sdk\platform-tools` |
+| NDK / CMake | NDK 28.0.13004108、CMake 3.22.1；`AndroidDev\android-sdk\ndk`、`cmake`；后者由 `flutter_qjs` 的 Android 构建指定 |
+| Java | 复用已有 JDK 21.0.10，`E:\Program Files\jdk\jdk21` |
+| Pub / Gradle 缓存 | `AndroidDev\pub-cache`、`AndroidDev\gradle-cache`；项目依赖按原锁文件解析，没有升级依赖 |
+| 配置、调试签名、临时目录 | `AndroidDev\user-config`、`android-user`、`local-data`、`temp`；日志和安装清单在 `AndroidDev\logs`、`setup` |
+
+除首行和 Java 行写明绝对路径外，表中 `AndroidDev\...` 均相对 `E:\Program Files`。各目录空间占用以本机安装清单为准；不把 Junction 重复计入。
+
+【已验证：执行证据】`AndroidDev\bin` 中的 `flutter.cmd`、`dart.cmd`、`sdkmanager.cmd`、`adb.cmd` 已配置到用户 PATH。包装器把 Pub、Gradle、Android 用户配置、Flutter 配置和运行临时文件定向 E 盘；已有终端需重新打开才能继承用户环境变量，也可直接调用完整路径。
+
+```powershell
+& 'E:\Program Files\AndroidDev\bin\flutter.cmd' doctor -v
+& 'E:\Program Files\AndroidDev\bin\flutter.cmd' pub get --offline --enforce-lockfile
+& 'E:\Program Files\AndroidDev\bin\flutter.cmd' devices
+```
+
+【已验证：执行证据】`flutter doctor -v` 检查全部通过；Redmi K30 5G 真机已授权 USB 调试，Android 11（API 30）、ARM64。手机 ID 仅用于本地命令，不写入共享知识库。`android/local.properties` 和 `android/key.properties` 为本机配置，已确认被 Git 忽略；调试签名位于 E 盘，不使用发布密钥。
+
+本机 Java 下载复用现有 HTTP 代理 `127.0.0.1:7897`，设置保存在专用 Gradle 配置和启动包装器中。若本机代理端口或网络改变，应同步调整这些本地设置。工具未改系统代理。
+
+【已验证：执行证据】首次 Gradle 默认 4 GiB 堆构建出现原生内存分配失败；已在专用 `gradle-cache/gradle.properties` 中配置 1536 MiB 堆、2 个 worker、关闭并行和常驻 daemon、Kotlin 编译进程复用。该本机限制不修改仓库 `android/gradle.properties`。构建时仍需留出其他进程可用的系统内存。
+
+【已验证：执行证据】释放其他应用占用并补齐 SDK 平台后，以下命令退出码为 0；Gradle 8.14.3 完成 636 个任务（631 执行、5 已为最新），首次成功构建约 6 分 28 秒。产物为 `build/app/outputs/flutter-apk/app-debug.apk`，约 104.5 MiB；APK 元数据确认应用 ID 为 `com.github.pacalini.pica_comic`、版本 4.2.11（4211）、可调试。未修改业务源码、依赖锁文件或已跟踪的 Android 构建配置。
+
+```powershell
+& 'E:\Program Files\AndroidDev\bin\flutter.cmd' build apk --debug --target-platform android-arm64 --no-pub
+```
+
+【已验证：执行证据】Redmi 的首次安装返回 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。用户更换手机后，识别为 PHZ110、Android 14（API 34）、ARM64；该设备已有原版应用，因此采用独立测试包 `com.github.pacalini.pica_comic.devtest`，不覆盖原应用或使用其数据。
+
+【已验证：执行证据】独立包名由 E 盘本机 `gradle-cache/init.d/pica-isolated-debug.gradle` 设置：仅匹配本检出目录的 `:app` 工程，通过 `androidComponents.finalizeDsl` 为 Debug 的 `applicationIdSuffix` 设置 `.devtest`。Release 不加后缀，仓库源码和构建配置未改。使用本机工具链的后续 Debug 构建也沿用这一测试包名；生成路径仍为 `build/app/outputs/flutter-apk/app-debug.apk`，首次无后缀构建的产物已由后续测试版替换。
+
+【已验证：执行证据】独立测试包构建通过，ADB 安装返回 `Success`；`am start -W` 返回 `Status: ok`，冷启动约 3 秒。启动后检查到应用进程和前台 MainActivity，截图确认显示首次设置界面（漫画列表显示方式）；采集的启动日志没有匹配到初始化失败、Flutter 错误或崩溃标记。证据在本机 `logs/pica-device-launch.log`、`logs/pica-device-launch.png` 和 `setup/device-test.json`。验证仅覆盖安装及首次启动，漫画源、阅读、下载和数据迁移仍未验证。
+
+【已验证：执行证据】安装主目录按 Windows 文件分配空间统计约 10.23 GiB，其中包含 Pub／Gradle 依赖和构建缓存；项目内 `build/`、`.dart_tool/`、`android/.gradle/` 的生成文件另约 1.68 GiB。复用的 JDK 约 317 MiB，不计入新增安装主目录。统计未重复计入 Junction，也不包含目录元数据；后续构建会改变缓存大小。本机逐项清单为 `E:\Program Files\AndroidDev\installation-report.md`，机器可读数据为同目录下 `setup/inventory.json`。

@@ -15,7 +15,7 @@
 | 环境、命令、CI 与验证限制 | [开发指南](development.md) | 配置事实、脚本副作用、实际检查 |
 | 优先核实的候选问题 | [技术债](technical-debt.md) | 静态依据、待验证影响与建议 |
 
-证据约定：**【已实现：静态依据】**指源码支持；**【已验证：执行证据】**指实际执行并记录结果；**【推测／待核实】**指尚无运行证据；**【建议】**指未来动作。没有将外部站点可用性、应用运行或平台兼容性写成已验证。
+证据约定：**【已实现：静态依据】**指源码支持；**【已验证：执行证据】**指实际执行并记录结果；**【推测／待核实】**指尚无运行证据；**【建议】**指未来动作。首轮分析不把外部站点可用性、应用运行或平台兼容性写成已验证；后续执行证据按具体平台和检查范围补充。
 
 ## 模块覆盖
 
@@ -23,7 +23,7 @@
 
 | 模块／路径 | 分析状态 | 已读范围及关键源码锚点 | 文档 | 验证状态 | 缺口／下一步 |
 | --- | --- | --- | --- | --- | --- |
-| 启动与全局状态：`lib/main.dart`、`init.dart`、`base.dart`、`foundation/app.dart` | 已分析 | `main / init / App.init / Appdata.readData`，主路由、设置读取和异常边界 | [架构](architecture.md)、[数据](data-model.md) | 静态；未运行 | 启动故障注入、平台生命周期仍未验证 |
+| 启动与全局状态：`lib/main.dart`、`init.dart`、`base.dart`、`foundation/app.dart` | 已分析 | `main / init / App.init / Appdata.readData`，主路由、设置读取和异常边界 | [架构](architecture.md)、[数据](data-model.md) | Android 14 独立测试包首次启动通过，显示首次设置界面 | 启动故障注入、平台生命周期仍未验证 |
 | 漫画源注册与安装：`lib/comic_source/`、`assets/init.js`、`foundation/js_engine.dart` | 已分析 | `ComicSource.init / ComicSourceParser.parse / JsEngine._messageReceiver`；搜索、详情、章节主适配 | [漫画源](modules/comic-sources.md) | 静态；未运行 | 全部桥接方法、更新列表与重载并发留待后续 |
 | 浏览、搜索与详情：`lib/pages/`、`components/comics_list.dart` | 部分 | `MainPageState / SearchResultPage / ComicsPageLogic / ComicPage / JmComicPage` | [流程](business-flows.md) | 静态；未运行 | 探索、分类、排行、其余详情及账户 UI 未深读 |
 | 阅读器：`lib/pages/reader/` | 部分 | `ReadingData / ComicReadingPageLogic / _updateHistory / loadInfo`；在线／离线主分支 | [阅读与下载](modules/reader-download.md) | 静态；未运行 | 触摸、音量、双页／连续阅读、无章节与资源释放 |
@@ -37,11 +37,11 @@
 | WebDAV／用户数据包：`lib/network/webdav.dart`、`lib/tools/io_tools.dart` | 已分析 | `uploadData / downloadData / importData / _exportData`；版本、包内容与合并边界 | [接口](api-integrations.md)、[数据](data-model.md) | 静态；未连接服务 | 并发／时钟冲突、中断恢复、可选下载目录导入 |
 | 平台工具／更新：`lib/tools/`、`lib/network/update.dart` | 部分 | `handleAppLinks / onStart / getLatestVersion` 与调用者；仅主路径 | [接口](api-integrations.md) | 静态；未运行 | 后台凭据、PDF／图片导出、通知、平台通道 |
 | UI 基础设施：`lib/components/`、`lib/foundation/` | 部分 | `StateController / StateBuilder / App`，主导航与控制器消费者 | [架构](architecture.md) | 静态；未运行 | 控件交互、布局、控制器订阅清理与无障碍 |
-| 原生工程／打包：各平台目录、`windows/build_windows.py`、`debian/build.py` | 部分 | Android Gradle、Windows runner CMake、两个打包脚本的写入行为 | [开发](development.md) | 静态；未构建 | 原生通道与各平台运行；Web 兼容性未确认 |
-| CI／测试：`.github/workflows/`、`test/` | 已分析 | 全部工作流配置与 `widget_test.dart → main` 空入口 | [开发](development.md) | Git／PATH 检查已执行；CI／Flutter 测试未运行 | 未查询 CI 历史，没有有效业务测试 |
+| 原生工程／打包：各平台目录、`windows/build_windows.py`、`debian/build.py` | 部分 | Android Gradle、Windows runner CMake、两个打包脚本的写入行为 | [开发](development.md) | Android Debug 构建、独立测试包安装及首次启动通过 | 原生通道各功能及其他平台运行、Web 兼容性未确认 |
+| CI／测试：`.github/workflows/`、`test/` | 已分析 | 全部工作流配置与 `widget_test.dart → main` 空入口 | [开发](development.md) | Git／PATH、Flutter doctor、锁定依赖解析和 Android 构建已执行；CI／Flutter 测试未运行 | 未查询 CI 历史，没有有效业务测试 |
 | 翻译与辅助资源：`utils/`、`lib/tools/translations.dart`、`assets/` | 部分 | 两个 utils `main` 的写入／下载副作用，资源清单和 JS API | [开发](development.md) | 静态；脚本未运行 | 翻译运行时、标签数据完整性；大型资源见排除项 |
 
-排除项：生成平台插件配置不做内部实现分析；`lib/components/scrollable_list/` 带 Fuchsia／BSD-style 版权声明，除阅读器消费入口外未深读其复制的滚动实现；字体、图标、图片、大型标签／翻译 JSON 不逐字分析。Git／Pub 依赖仅查清单与锁定引用，未下载和分析第三方实现；没有自动展开子模块或 LFS 内容。初始目录盘点确认 `lib/` 有 198 个已跟踪 Dart 文件，此数量不作为理解覆盖率。
+排除项：生成平台插件配置不做内部实现分析；`lib/components/scrollable_list/` 带 Fuchsia／BSD-style 版权声明，除阅读器消费入口外未深读其复制的滚动实现；字体、图标、图片、大型标签／翻译 JSON 不逐字分析。首轮对 Git／Pub 依赖只查清单与锁定引用；后续 Android 环境配置已下载锁定依赖并核对插件原生构建配置，仍未对第三方实现作完整分析。没有自动展开子模块或 LFS 内容。初始目录盘点确认 `lib/` 有 198 个已跟踪 Dart 文件，此数量不作为理解覆盖率。
 
 许可证线索：根 `LICENSE` 为 MIT，包含保留版权和许可声明的要求；上面第三方文件的独立声明仍需在实际二次分发时逐项核对，本轮不作完整许可证审查。
 
@@ -53,7 +53,8 @@
 - 检出方式：浅克隆（深度 1），未递归拉取子模块；历史变更频率不在本轮结论范围内。
 - 本轮授权：建立首轮知识库，仅写文档和知识库协作规则，不修改业务源码、依赖或锁文件。
 - 本轮完成：阶段 A 骨架、B 架构与存储、C 四条代表性流程、D 两个核心模块与开发准备；其余实现盲区保留在上表。已有上游说明未改，未创建或推断 Accepted ADR。
-- 后续优先项：先补可用 Flutter 环境，再核对[技术债 KB-03／KB-04](technical-debt.md) 的无章节源及在线／下载图片差异；随后按具体需求补全网络收藏关联、剩余源协议或目标平台。跨源身份改动另需明确迁移与兼容范围。
+- 环境进度（2026-11-16）：已按授权在 E 盘配置 Android 真机工具链，`flutter doctor -v` 全部通过；更换为 Android 14 的 PHZ110 后，独立 Debug 测试包已构建、安装并启动至首次设置界面，保留手机原版应用及数据。详情见[本机 Android 环境](development.md#本机-android-真机环境2026-11-16)。首轮分析记录中的“未安装／未运行”保留其历史时点含义。
+- 后续优先项：在已配置的 Android 环境核对[技术债 KB-03／KB-04](technical-debt.md) 的无章节源及在线／下载图片差异；随后按具体需求补全网络收藏关联、剩余源协议或目标平台。跨源身份改动另需明确迁移与兼容范围。
 - 最近巡检：无；本轮为首轮分析。
 
 ## 协作仓库与分支
