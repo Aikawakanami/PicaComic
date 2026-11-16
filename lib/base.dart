@@ -119,6 +119,7 @@ class Appdata {
     "gold-usergeneratedcontent.net", //87 hitomi cdn url
     "0", //88 jm auto checkin
     "2.0.11", //89 jm app version
+    "1", //90 显示多选收藏结果提示
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -215,7 +216,7 @@ class Appdata {
       Webdav.uploadData();
     }
     var s = await SharedPreferences.getInstance();
-    await updateSettings();
+    await updateSettings(false);
     await s.setStringList("blockingKeyword", blockingKeyword);
     await s.setStringList("firstUse", firstUse);
   }
@@ -247,7 +248,7 @@ class Appdata {
         "favoriteTags": favoriteTags.toList(),
       };
 
-  bool readDataFromJson(Map<String, dynamic> json) {
+  Future<bool> readDataFromJson(Map<String, dynamic> json) async {
     try {
       var newSettings = List<String>.from(json["settings"]);
       var downloadPath = settings[22];
@@ -270,12 +271,14 @@ class Appdata {
           .toList();
       favoriteTags =
           Set.from((json["favoriteTags"] ?? []) + List.from(favoriteTags));
-      writeData(false);
+      await writeData(false);
+      await (await SharedPreferences.getInstance())
+          .setStringList("favoriteTags", favoriteTags.toList());
       return true;
     } catch (e, s) {
       LogManager.addLog(LogLevel.error, "Appdata.readDataFromJson",
           "error reading appdata$e\n$s");
-      readData();
+      await readData();
       return false;
     }
   }

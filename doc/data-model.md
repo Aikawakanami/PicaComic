@@ -1,6 +1,6 @@
 # 数据模型与持久化
 
-[返回知识库](README.md)。以下为【已实现：静态依据】，来自当前建表、序列化与调用代码；没有打开真实用户数据库或执行迁移。
+[返回知识库](README.md)。以下结构以当前建表、序列化与调用代码的【已实现：静态依据】为主；后续中性夹具验证及按用户请求执行的本机数据恢复另有显式记录，不将单次恢复推广为全部历史格式迁移已验证。
 
 ## 领域对象与身份
 
@@ -45,15 +45,17 @@
 | 下载目录下漫画文件夹 | `cover.jpg`，有章节时使用从 1 开始的章节目录，图片文件 basename 从 0 开始 | `lib/network/download_model.dart → _addDownloading / getLinks`；`download.dart → getImage` |
 | `favoritesCover/`、`rule.json`、`log.txt` | 收藏封面副本、hosts 代理配置与运行日志；Android 日志可放 external storage，iOS 不设置日志文件 | `lib/foundation/local_favorites.dart → addComic / getCover`；`lib/network/http_proxy.dart → createConfigFile`；`lib/init.dart → init` |
 
+【已实现：静态依据】`Appdata.settings[90]` 控制多选收藏的数量结果提示，默认 `"1"`（开启）；由“设置 → 本地收藏”保存，沿用 settings 文件及导出/同步机制。旧配置缺少末尾字段时保留默认值；关闭提示不影响收藏数据库写入。
+
 ## 兼容性与合并语义
 
-- 历史查找、更新和缓存均按 `target`，SQL 主键没有 `type`。本地收藏表虽为复合主键，`LocalFavoritesManager.addComic` 的前置查重只查 `target`；不要从建表约束推断所有写路径都能保存同 target 的不同源。风险记录见[技术债](technical-debt.md)。
+- 历史查找、更新和缓存均按 `target`，SQL 主键没有 `type`。本地收藏的单项及批量新增现在共用 `LocalFavoritesManager._insertComic → comicExists`，按 `(target, type)` 查重，与收藏表主键一致；列表收藏徽标使用的 `isExist / _cachedFavoritedTargets` 仍只按 `target`，不能把写入修正推广为所有身份处理均已统一。风险记录见[技术债](technical-debt.md)。
 - 下载 ID：哔咔为原 ID，EH 为 `getGalleryId(link)`，JM 为 `jm<ID>`，Hitomi 为 `hitomi<ID>`，HT 为 `Ht<ID>`，NHentai 为 `nhentai<ID>`；通用自定义源为 `<sourceKey>-<id>`，还可能应用 `matchBriefIdReg`。依据：`lib/network/download.dart → AddDownloadExt / generateId`，消费者见 `lib/pages/reader/reading_data.dart → downloadId`。
 - 章节约定：已下载章节列表和下载选择值从 0 开始；阅读 `ep/order` 和文件夹从 1 开始；图片页参数从 0 开始，阅读 UI 的有效 `index` 从 1 开始。依据：`ReadingData.checkEpDownloaded / loadImage`、`DownloadingItem.getLinks`、`ComicReadingPageLogic.index / order`。转换发生在多处，修改时逐处核对。
-- 迁移是启动时的条件处理，没有集中版本迁移器：历史增加 `max_page` 并导入旧 `history.json`；收藏重建旧主键表、导入旧 JSON／临时数据库；下载从旧 `info.json` 建库。依据：`HistoryManager.init`、`LocalFavoritesManager._checkAndCreate / readData`、`DownloadManager._initDb`；尚未验证中断或回滚。
-- WebDAV 导入的历史／图片收藏及本地收藏临时库以“已有则跳过、缺失则新增”为主；不是按每条记录时间合并进度。脚本和 Cookie 文件会被替换；如包里包含下载目录，该目录也会替换。依据：`HistoryManager.tryUpdateDb`、`LocalFavoritesManager.readData`、`lib/tools/io_tools.dart → importData`。
-- `Appdata.readDataFromJson` 保留本机下载路径 `settings[22]` 与生物识别开关 `settings[13]`，屏蔽词及收藏标签合并；`toJson` 不包含搜索历史和 implicitData。完整同步边界见[接口与集成](api-integrations.md)。
+- 迁移是启动时的条件处理，没有集中版本迁移器：历史增加 `max_page` 并导入旧 `history.json`；收藏重建旧主键表、导入旧 JSON／临时数据库；下载从旧 `info.json` 建库。依据：`HistoryManager.init`、`LocalFavoritesManager._checkAndCreate / readData`、`DownloadManager._initDb`；SQLite 导入的事务失败和历史暂存恢复已验证，其他旧格式迁移与下载中断仍未验证。
+- SQLite 导入由 `lib/foundation/import_database.dart → mergeFavoriteDatabases / mergeHistoryDatabases` 在后台以单库事务合并，成功后删除暂存文件；`HistoryManager.init` 也会尝试恢复 `history_temp.db`，失败保留暂存库并记录日志。WebDAV 导入的历史／图片收藏及本地收藏临时库以“已有则跳过、缺失则新增”为主；不是按每条记录时间合并进度。脚本和 Cookie 文件会被替换；如包里包含下载目录，该目录也会替换。依据：`HistoryManager.tryUpdateDb`、`LocalFavoritesManager.readData`、`lib/tools/io_tools.dart → importData`。
+- `Appdata.readDataFromJson` 现在等待设置、屏蔽词、首次使用标记及合并后的收藏标签落盘后返回；`writeData(false)` 不再通过 `updateSettings` 间接触发同步。它保留本机下载路径 `settings[22]` 与生物识别开关 `settings[13]`，屏蔽词及收藏标签合并；`toJson` 不包含搜索历史和 implicitData。完整同步边界见[接口与集成](api-integrations.md)。
 
 ## 尚未验证
 
-【推测／待核实】跨源 ID 冲突的实际数据样本、hashCode 长期兼容性、所有历史版本升级、SQLite 并发／事务一致性、损坏包恢复和大库性能。本轮没有执行任何应用数据的导入、清理或迁移。
+大库导入与暂存恢复的本轮实现及执行证据见[导入恢复变更](changes/2026-11-16-data-import-recovery.md)。其余跨源历史 ID 冲突、hashCode 长期兼容性、全部历史格式升级、并发导入与整包中断一致性仍属【推测／待核实】。

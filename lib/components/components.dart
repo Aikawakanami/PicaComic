@@ -37,6 +37,7 @@ part 'appbar.dart';
 part 'avatar.dart';
 part 'button.dart';
 part 'comic_tile.dart';
+part 'comic_selection.dart';
 part 'comics_list.dart';
 part 'consts.dart';
 part 'flyout.dart';

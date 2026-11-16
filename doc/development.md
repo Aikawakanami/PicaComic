@@ -35,7 +35,7 @@ flutter analyze
 flutter test
 ```
 
-分析入口依据为 `analysis_options.yaml → include: package:flutter_lints/flutter.yaml`；测试依赖为 `pubspec.yaml → dev_dependencies.flutter_test`。目前 `test/widget_test.dart → main` 为空，没有断言；即使将来测试命令结束，也不能据此认为阅读、下载或迁移已验证。
+分析入口依据为 `analysis_options.yaml → include: package:flutter_lints/flutter.yaml`；原 `test/widget_test.dart → main` 仍为空。多选功能已新增 `test/comic_selection_test.dart` 和基于 Flutter SDK `integration_test` 开发依赖的真机测试；其验证范围见[多选变更记录](changes/2026-11-16-multi-select-favorites.md)，不据此认为阅读、下载或迁移已验证。
 
 【建议】目标是 Windows 时，可在工具链检查通过后使用 `flutter run -d windows` 做最小启动验证。首次运行会创建 support/cache 数据并执行旧数据检查；应使用独立的测试应用数据，观察启动、设置、无账户浏览和错误提示。Android 还需先解决上表的本机 SDK／签名配置；本轮不通过修改 Gradle 绕过它。
 
@@ -56,7 +56,7 @@ flutter test
 - `debian/build.py` 临时替换 Debian 配置及 desktop 文件的版本，调用构建／打包后恢复；同样包含写入。
 - `utils/check_translation.dart → main` 会直接改写 `assets/translation.json`、补空翻译并删除未发现的键；不能按文件名把它当成只读检查。
 - `utils/tags_translation.dart → main` 克隆标签数据库、覆盖 `assets/tags.json` 并递归删除临时仓库；不能作为首轮静态分析的默认步骤。
-- `lib/tools/io_tools.dart → importData / moveDirectory` 与 `lib/init.dart → _checkOldData` 会替换／删除应用数据。本轮只阅读定义，没有执行。
+- `lib/tools/io_tools.dart → importData / moveDirectory` 与 `lib/init.dart → _checkOldData` 会替换／删除应用数据。首轮只阅读定义；后续用户指定备份的导入恢复执行记录见[导入恢复](changes/2026-11-16-data-import-recovery.md)。
 
 ## 首轮分析验证记录
 
@@ -105,8 +105,32 @@ flutter test
 
 【已验证：执行证据】Redmi 的首次安装返回 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。用户更换手机后，识别为 PHZ110、Android 14（API 34）、ARM64；该设备已有原版应用，因此采用独立测试包 `com.github.pacalini.pica_comic.devtest`，不覆盖原应用或使用其数据。
 
-【已验证：执行证据】独立包名由 E 盘本机 `gradle-cache/init.d/pica-isolated-debug.gradle` 设置：仅匹配本检出目录的 `:app` 工程，通过 `androidComponents.finalizeDsl` 为 Debug 的 `applicationIdSuffix` 设置 `.devtest`。Release 不加后缀，仓库源码和构建配置未改。使用本机工具链的后续 Debug 构建也沿用这一测试包名；生成路径仍为 `build/app/outputs/flutter-apk/app-debug.apk`，首次无后缀构建的产物已由后续测试版替换。
+【已验证：执行证据】初次独立包名由 E 盘本机 `gradle-cache/init.d/pica-isolated-debug.gradle` 设置：仅匹配本检出目录的 `:app` 工程，通过 `androidComponents.finalizeDsl` 为 Debug 的 `applicationIdSuffix` 设置 `.devtest`。后续多选功能验证改用 `.devtest.multiselect`，保留手机既有原版和 `.devtest` 包的数据。Release 不加后缀，仓库 Android 构建配置未改。生成路径仍为 `build/app/outputs/flutter-apk/app-debug.apk`，该路径随当前构建目标被覆盖；集成测试 APK 不能当作正常应用入口的 APK。
 
 【已验证：执行证据】独立测试包构建通过，ADB 安装返回 `Success`；`am start -W` 返回 `Status: ok`，冷启动约 3 秒。启动后检查到应用进程和前台 MainActivity，截图确认显示首次设置界面（漫画列表显示方式）；采集的启动日志没有匹配到初始化失败、Flutter 错误或崩溃标记。证据在本机 `logs/pica-device-launch.log`、`logs/pica-device-launch.png` 和 `setup/device-test.json`。验证仅覆盖安装及首次启动，漫画源、阅读、下载和数据迁移仍未验证。
 
 【已验证：执行证据】安装主目录按 Windows 文件分配空间统计约 10.23 GiB，其中包含 Pub／Gradle 依赖和构建缓存；项目内 `build/`、`.dart_tool/`、`android/.gradle/` 的生成文件另约 1.68 GiB。复用的 JDK 约 317 MiB，不计入新增安装主目录。统计未重复计入 Junction，也不包含目录元数据；后续构建会改变缓存大小。本机逐项清单为 `E:\Program Files\AndroidDev\installation-report.md`，机器可读数据为同目录下 `setup/inventory.json`。
+
+## 多选收藏的检查与真机运行
+
+【已验证：执行证据】本轮多选新增 `integration_test` SDK 开发依赖，原有依赖版本未升级。`flutter test --no-pub test/comic_selection_test.dart` 的 8 项回归通过；当前 Android 14 真机运行集成测试的 5 组场景通过，补充关键词/排序/漫画源切换的 1 组场景也通过。精确范围及验证日志见[变更记录](changes/2026-11-16-multi-select-favorites.md)。按目标文件静态检查无 error/warning，保留 8 条既有 info；未触发远程 CI。
+
+真机测试通过 `flutter test integration_test/multi_select_favorites_test.dart --no-pub --reporter expanded` 并以 `-d` 指定授权设备；设备 ID 仅留在本机命令。测试目标使用中性临时源供数和临时 SQLite 收藏夹，不需要真实账户或站点 Cookie。测试不是实际网站连通性检查。
+
+【已验证：执行证据】最终正常入口按 `flutter build apk --debug --target lib/main.dart --target-platform android-arm64 --no-pub` 构建；本机 Debug 名称为“Pica 多选测试”，包名后缀 `.devtest.multiselect`，已在当前真机安装并正常冷启动。E 盘的 `setup/pica-multiselect-debug-manifest.xml` 复制原 Debug 权限并仅覆盖应用名称，由本机 Gradle init 配置引用；仓库 Android 构建文件未改。普通入口 APK 另存于 `build/app/outputs/multiselect/PicaComic-multiselect-debug.apk`，避免与集成测试入口产物混淆。原版与之前的 `.devtest` 应用及数据均保留。
+
+## 大库导入恢复检查
+
+导入修复范围与执行证据见[导入恢复变更](changes/2026-11-16-data-import-recovery.md)。新增 `integration_test/data_import_test.dart` 使用中性生成的数据库和数据包，必须使用不含个人数据的独立 Debug 包。
+
+【已实现：静态依据】本机 Flutter 3.41.6 的 `flutter_tools/lib/src/test/integration_test_device.dart → start / kill` 在构建前读取现有 APK 的包名，测试结束按该缓存包名卸载；Android `startApp` 构建后另行读取新 APK。切换本机 Debug 后缀而直接运行测试，会使这两个包名不一致。【已验证：执行证据】本轮由此误卸载多选测试版，已发现并从事前完整快照恢复；原版应用及原导出未受影响。不能将一次成功测试等同于测试环境隔离正确。
+
+【建议】今后切换测试包名时，先单独构建相应测试目标，使用 `aapt dump badging` 核实生成 APK 为独立测试包，再启动真机测试；测试前另行确认设备包名及快照。已有个人数据的应用不得作为 `flutter test integration_test/...` 的目标，正常入口更新使用校验包名后的 ADB `install -r`，避免测试工具自动卸载行为。
+
+## 跨页选择的本地回归与安装交付
+
+【已验证：执行证据】`flutter test --no-pub test/comic_selection_test.dart test/cross_page_selection_test.dart --reporter expanded` 共 14 项通过；定向分析为 No issues found。新增测试使用电脑端中性源/条目，不读取个人数据或调用站点；已有真机集成脚本已更新分页保留和数量文案期望，但本轮未运行。规则、模拟边界及证据见[跨页变更](changes/2026-11-16-cross-page-selection.md)。
+
+正常入口构建、包名核对、当前应用完整数据备份及 ADB `install -r` 更新完成，启动请求返回 Status: ok。当前普通测试版支持跨页选择，提示顶部偏移为安全区域下 228 个逻辑像素；APK 为 `build/app/outputs/multiselect/PicaComic-cross-page-selection-debug.apk`。实际网站和真机交互仍交由用户验收，不用本地模拟通过代替真机验收。
+
+【已验证：用户反馈】用户在最新大图标与全不选版本安装后确认测试通过，并授权汇总提交到个人仓库 dev；该验收记录见[跨页选择变更](changes/2026-11-16-cross-page-selection.md#用户验收与仓库交付2026-11-16)。本机自动安装记录保留执行时的 user_pending 状态，其后的用户确认以本段和变更记录为准。

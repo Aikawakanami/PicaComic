@@ -1,6 +1,6 @@
 # 接口与外部集成
 
-[返回知识库](README.md)。本项目主要消费外部服务；本页记录客户端契约和边界，不代表任何站点当前可访问。除明确列出的文档检查外，结论均为【已实现：静态依据】。
+[返回知识库](README.md)。本项目主要消费外部服务；本页记录客户端契约和边界，不代表全部站点当前可访问。除单独标注的执行记录外，结论均为【已实现：静态依据】。
 
 ## 漫画源能力契约
 
@@ -36,6 +36,23 @@
 | HT | `lib/comic_source/built_in/ht_manga.dart → htManga`；`lib/network/htmanga_network/htmanga_main_network.dart → HtmangaNetwork` | 域名来自 `settings[31]`，独立 HTML／账户及图片处理 |
 | NHentai | `lib/comic_source/built_in/nhentai.dart → nhentai`；`lib/network/nhentai_network/nhentai_main_network.dart → NhentaiNetwork` | 独立 session Cookie、`search / getComicInfo / getImages`；不能把废弃 `settings[48]` 当作当前域名配置 |
 
+## JM 搜索的 limit 参数实测（2026-11-16）
+
+【已实现：静态依据】`lib/network/jm_network/jm_network.dart → JmNetwork.searchNew` 请求 `/search?&search_query=...&o=...`，第一页省略 `page`，后续页增加 `page`；现有代码未传 `limit`。域名更新遵循 `getApiDomains / tryFetchAndDecrypt`，请求头及响应解密分别依据 `headers.dart → getApiOptions` 和 `JmNetwork.convertData`。
+
+【已验证：执行证据】用独立临时脚本执行真实 HTTP 对照请求，没有登录或使用个人 Cookie、应用缓存；按项目现有公开域名更新流程获得测试地址 `https://www.cdnbtd.cc/search`。保持 TLS 校验，复用电脑现有 HTTP 代理；压缩声明使用 gzip／deflate／br，省略 zstd。测试关键词为“漫画”，排序 `mr`，请求版本为源码默认的 2.0.11；响应解密后 `total=2866`，所有下列请求均为 HTTP 200：
+
+| 页码 | limit 参数 | content 条数 | 与同页不传 limit 的结果比较 |
+| --- | --- | --- | --- |
+| 1（省略 page） | 不传 | 80 | 基准 |
+| 1（省略 page） | 分别为 1、5、10、50、100 | 均为 80 | 漫画 ID 及顺序全部一致 |
+| 2 | 不传 | 80 | 基准；与第一页的 ID 无交集 |
+| 2 | 5 | 80 | 漫画 ID 及顺序与第二页基准一致 |
+
+【已验证：执行证据】因此，在上述域名、匿名请求和版本条件下，`limit` 未改变每页数量或结果内容，不能用它控制每页返回条数；`page` 确实改变结果。辅助关键词 `test` 的总结果只有 48 条，超出末页仍重复返回，故未将它作为分页正向控制；关键词 `a` 返回空结果，也未用于判断每页数量。源码旧默认域名返回 HTML／404，未当作 API 搜索成功。
+
+本机证据：`E:\Program Files\AndroidDev\logs\jm-limit-results.md`、`jm-limit-comparison.json` 和三份 `jm-limit-probe*.json`；临时脚本在同一安装根目录的 `setup/jm-limit-probe*.ps1`。摘要仅保留数量、ID 和请求元数据，不保存漫画正文、图片或个人凭据。业务源码和依赖未改。本次未测试登录态、其他有效域名或其他分页参数，也未验证应用内阅读、下载等功能。
+
 ## WebDAV 与数据包
 
 `lib/network/webdav.dart → Webdav` 使用 `settings[45]` 的四段配置：服务 URL、用户名、密码、远程目录，以分号拼接；默认空值表示不启用。版本保存在 `settings[46]`，上传时设置为 Unix 秒时间戳，不是业务 Schema 版本。
@@ -43,14 +60,14 @@
 - `uploadData` 通过 `_isOperating / _haveWaitingTask` 合并部分并发请求，调用 `exportDataToFile(false, ...)`，上传 `<timestamp>.picadata`。远程目录中发现同一天的数字版本文件会移除一份，不能把它描述为完整保留策略。
 - `downloadData` 列目录取最大数字版本；版本字符串相同且未强制时跳过下载，其他情况交给 `importData`。`syncData` 用 `_retryZone` 最多尝试 3 次，失败后在配置尾部加 `;0`，当前会话借此禁用自动同步并提供重试动作。
 - `.picadata` 是由 `ZipFile` 打包的文件集合。`lib/tools/io_tools.dart → _exportData / exportDataToFile` 默认包括 appdata、收藏库、历史库、cookies.db 以及 `comic_source` 内所有普通文件；可选包含下载目录。WebDAV 传入 `false`，所以自动同步不带下载漫画图片。
-- 当前打包路径没有显式加密步骤；appdata 内的 `settings[45]` 及源 `.data`／Cookie 文件可能携带认证信息。不得把“未同步下载图片”误写为“不包含账户数据”。这是静态包内容边界，没有读取或生成真实备份。
-- `importData` 显式传路径时启用版本判断；对旧／相同版本可跳过部分文件替换，但后续仍执行 `Appdata.readDataFromJson` 和 manager 读取。不是严格的“旧版本整包不导入”，也不是逐字段冲突解决。合并规则见[数据模型](data-model.md)。
+- 当前打包路径没有显式加密步骤；appdata 内的 `settings[45]` 及源 `.data`／Cookie 文件可能携带认证信息。不得把“未同步下载图片”误写为“不包含账户数据”。这是包内容的静态边界；后续仅按用户明确请求在本机备份和恢复个人数据，记录见[导入恢复](changes/2026-11-16-data-import-recovery.md)，原始备份未入库。
+- `importData / importDataFromFile` 显式路径默认启用版本判断，旧／相同 WebDAV 版本现在整包跳过，不再继续覆盖设置；手工选择文件绕过该版本限制。先解包校验，SQLite 数据在后台事务合并，错误统一返回失败并尝试恢复服务。合并规则见[数据模型](data-model.md)，修复与验证边界见[导入恢复](changes/2026-11-16-data-import-recovery.md)。
 
-【推测／待核实】多设备时钟偏差、同时写入、失败重试、同版本包处理和导入中断一致性尚未实测；未配置或访问任何 WebDAV 账户。
+【推测／待核实】本地夹具已验证旧版本跳过及失败后重试；多设备时钟偏差、同时写入、远端失败重试和整包导入中断一致性尚未实测，未配置或访问任何 WebDAV 账户。
 
 ## 其他外部边界
 
 - 更新：`lib/network/update.dart → getLatestVersion / getDownloadUrl` 使用本项目 GitHub Releases API 与 latest 页面；`lib/pages/main_page.dart → _checkUpdates` 受 `settings[2]` 和上次检查时间限制。本轮未把公开仓库元数据读取当成应用更新功能测试。
 - 链接／剪贴板：`lib/tools/app_links.dart → canHandle / handleAppLinks` 识别 EH／EX、NHentai、Hitomi host；`lib/main.dart → didChangeAppLifecycleState` 与 `MainPage` 受 `settings[61]` 控制剪贴板检查。JM／哔咔不在该 host 列表内。
 - 后台：`lib/tools/background_service.dart → onStart / runBackgroundService` 注册移动端哔咔签到；权限通知、系统调度与会话恢复尚未验证。
-- Git 依赖：`pubspec.yaml → photo_view / webdav_client / zip_flutter / flutter_qjs / desktop_webview_window / flutter_inappwebview / flutter_to_arch` 来自 Git 仓库，具体解析提交由 `pubspec.lock → resolved-ref` 记录。下载依赖和原生构建尚未执行。
+- Git 依赖：`pubspec.yaml → photo_view / webdav_client / zip_flutter / flutter_qjs / desktop_webview_window / flutter_inappwebview / flutter_to_arch` 来自 Git 仓库，具体解析提交由 `pubspec.lock → resolved-ref` 记录。后续 Android 环境已按锁文件下载依赖并完成原生 Debug 构建，Git 依赖实现仍未逐项全面审阅。

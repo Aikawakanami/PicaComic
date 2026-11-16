@@ -126,6 +126,9 @@ class _CategoryComicsPageState extends State<CategoryComicsPage> {
 }
 
 class _CategoryComicsList extends ComicsPage<BaseComic> {
+  @override
+  bool get enableMultiSelect => true;
+
   const _CategoryComicsList({
     super.key,
     required this.loader,

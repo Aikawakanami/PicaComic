@@ -3,6 +3,15 @@ part of 'components.dart';
 class ComicsPageLogic<T> extends StateController {
   bool loading = true;
 
+  final selection = ComicSelectionController();
+  int _generation = 0;
+  bool? _paged;
+
+  void updateMode(bool paged) {
+    if (_paged != null && _paged != paged) selection.exit(notify: false);
+    _paged = paged;
+  }
+
   ///用于正常模式下的漫画数据储存
   List<T>? comics;
 
@@ -26,13 +35,15 @@ class ComicsPageLogic<T> extends StateController {
   void get(Future<Res<List<T>>> Function(int) getComics) async {
     if (loadingData) return;
     loadingData = true;
+    final generation = _generation;
     Future.microtask(() => update());
     if (comics == null) {
       var res = await getComics(1);
+      if (generation != _generation) return;
       if (res.error) {
         message = res.errorMessage;
       } else {
-        comics = res.data;
+        comics = List<T>.of(res.data);
         dividedComics = {};
         dividedComics![1] = res.data;
         if (res.subData is int) {
@@ -46,16 +57,38 @@ class ComicsPageLogic<T> extends StateController {
       loadingData = false;
       update();
     } else {
-      var res = await getComics(current);
+      final requestedPage = current;
+      var res = await getComics(requestedPage);
+      if (generation != _generation) return;
       if (res.error) {
-        message = res.errorMessage;
+        if (current == requestedPage) message = res.errorMessage;
       } else {
-        dividedComics![current] = res.data;
+        dividedComics![requestedPage] = res.data;
+        if (res.subData is int) maxPage = res.subData;
       }
-      loading = false;
+      if (current == requestedPage) loading = false;
       loadingData = false;
       update();
     }
+  }
+
+  void changePage(int page) {
+    if (selection.busy || page < 1 || page == current ||
+        (maxPage != null && page > maxPage!)) {
+      return;
+    }
+    current = page;
+    message = null;
+    loading = dividedComics?[page] == null;
+    update();
+  }
+
+  /// Retry the current request without discarding cross-page selections/cache.
+  void retry() {
+    if (selection.busy || loadingData) return;
+    message = null;
+    loading = true;
+    update();
   }
 
   int _emptyPageCount = 0;
@@ -64,8 +97,10 @@ class ComicsPageLogic<T> extends StateController {
     if (maxPage != null && current >= maxPage!) return;
     if (loadingData) return;
     loadingData = true;
+    final generation = _generation;
     Future.microtask(() => update());
     var res = await getComics(current + 1);
+    if (generation != _generation) return;
     if (res.error) {
       showToast(message: res.errorMessage!);
     } else {
@@ -87,6 +122,7 @@ class ComicsPageLogic<T> extends StateController {
         comics!.addAll(res.data);
       }
     }
+    if (generation != _generation) return;
     current++;
     loadingData = false;
     update();
@@ -94,6 +130,13 @@ class ComicsPageLogic<T> extends StateController {
 
   @override
   void refresh() {
+    if (selection.busy) return;
+    selection.exit();
+    _generation++;
+    loadingData = false;
+    current = 1;
+    maxPage = null;
+    _emptyPageCount = 0;
     loading = true;
     comics = null;
     message = null;
@@ -132,6 +175,14 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
 
   bool get showPageIndicator => true;
 
+  /// Opt-in only for the approved built-in browsing entry points.
+  bool get enableMultiSelect => false;
+
+  bool get _multiSelectEnabled =>
+      enableMultiSelect &&
+      const {'picacg', 'ehentai', 'jm', 'htmanga', 'nhentai'}
+          .contains(sourceKey);
+
   List<ComicTileMenuOption>? get addonMenuOptions => null;
 
   /// 刷新页面
@@ -166,107 +217,72 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
         init: ComicsPageLogic<T>(),
         tag: tag,
         builder: (logic) {
-          if (logic.dividedComics?[logic.current] == null &&
-              logic.message == null &&
-              appdata.settings[25] != "0") {
-            logic.loading = true;
-          }
-          if (logic.loading) {
-            logic.get(getComics);
-            return Column(
-              children: [
-                if (title != null) const Appbar(title: Text("")),
-                removeSliver(header) ?? const SizedBox(),
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              ],
-            );
-          } else if (logic.message != null) {
-            return Column(
-              children: [
-                removeSliver(header) ?? const SizedBox(),
-                Expanded(
-                    child: NetworkError(
-                  message: logic.message ?? "Network Error",
-                  retry: logic.refresh,
-                  withAppbar: title != null,
-                ))
-              ],
-            );
-          } else {
-            if (appdata.settings[25] == "0") {
-              List<T> comics = [];
-              if (appdata.appSettings.fullyHideBlockedWorks) {
-                for (var comic in logic.comics!) {
-                  if (isBlocked(comic) == null) {
-                    comics.add(comic);
-                  }
-                }
-              } else {
-                comics = logic.comics!;
-              }
-              if (comics.isEmpty) {
-                return SmoothCustomScrollView(
-                  slivers: [
-                    if (title != null)
-                      SliverAppbar(
-                        title: Text(title!),
-                        actions: tailing != null ? [tailing!] : null,
-                      ),
-                    if (header != null) header!,
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: buildEmptyView(context),
+          logic.updateMode(appdata.settings[25] != '0');
+          Widget buildList() {
+            if (logic.dividedComics?[logic.current] == null &&
+                logic.message == null &&
+                appdata.settings[25] != "0") {
+              logic.loading = true;
+            }
+            if (logic.loading) {
+              logic.get(getComics);
+              return Column(
+                children: [
+                  if (title != null) const Appbar(title: Text("")),
+                  removeSliver(header) ?? const SizedBox(),
+                  const Expanded(
+                    child: Center(
+                      child: CircularProgressIndicator(),
                     ),
-                  ],
-                );
-              }
-              return SmoothCustomScrollView(
-                slivers: [
-                  if (title != null)
-                    SliverAppbar(
-                      title: Text(title!),
-                      actions: tailing != null ? [tailing!] : null,
+                  )
+                ],
+              );
+            } else if (logic.message != null) {
+              return Column(
+                children: [
+                  removeSliver(header) ?? const SizedBox(),
+                  if (appdata.settings[25] != '0' && logic.comics != null &&
+                      showPageIndicator)
+                    SizedBox(
+                      width: double.infinity,
+                      child: removeSliver(buildPageSelector(context, logic))!,
                     ),
-                  if (header != null) header!,
-                  SliverGrid(
-                    delegate: SliverChildBuilderDelegate(
-                        childCount: comics.length, (context, i) {
-                      if (i == comics.length - 1) {
-                        logic.loadNextPage(getComics);
-                      }
-                      return buildItem(context, comics[i]);
-                    }),
-                    gridDelegate: SliverGridDelegateWithComics(),
-                  ),
-                  if (logic.current < (logic.maxPage ?? 114514) &&
-                      logic.loadingData)
-                    const SliverToBoxAdapter(
-                      child: ListLoadingIndicator(),
-                    )
-                  else
-                    const SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: 80,
-                      ),
-                    )
+                  Expanded(
+                      child: NetworkError(
+                    message: logic.message ?? "Network Error",
+                    retry: logic.retry,
+                    withAppbar: title != null,
+                  ))
                 ],
               );
             } else {
-              List<T> comics = [];
-              if (appdata.appSettings.fullyHideBlockedWorks) {
-                for (var comic in logic.dividedComics![logic.current]!) {
-                  if (isBlocked(comic) == null) {
-                    comics.add(comic);
+              if (appdata.settings[25] == "0") {
+                List<T> comics = [];
+                if (appdata.appSettings.fullyHideBlockedWorks) {
+                  for (var comic in logic.comics!) {
+                    if (isBlocked(comic) == null) {
+                      comics.add(comic);
+                    }
                   }
+                } else {
+                  comics = logic.comics!;
                 }
-              } else {
-                comics = logic.dividedComics![logic.current]!;
-              }
-              if (comics.isEmpty) {
+                if (comics.isEmpty) {
+                  return SmoothCustomScrollView(
+                    slivers: [
+                      if (title != null)
+                        SliverAppbar(
+                          title: Text(title!),
+                          actions: tailing != null ? [tailing!] : null,
+                        ),
+                      if (header != null) header!,
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: buildEmptyView(context),
+                      ),
+                    ],
+                  );
+                }
                 return SmoothCustomScrollView(
                   slivers: [
                     if (title != null)
@@ -275,84 +291,151 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                         actions: tailing != null ? [tailing!] : null,
                       ),
                     if (header != null) header!,
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: buildEmptyView(context),
+                    SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                          childCount: comics.length, (context, i) {
+                        if (i == comics.length - 1) {
+                          logic.loadNextPage(getComics);
+                        }
+                        return buildItem(context, comics[i]);
+                      }),
+                      gridDelegate: SliverGridDelegateWithComics(),
                     ),
-                  ],
-                );
-              }
-              Widget body = SmoothCustomScrollView(
-                slivers: [
-                  if (title != null)
-                    SliverAppbar(
-                      title: Text(title!),
-                      actions: tailing != null ? [tailing!] : null,
-                    ),
-                  if (header != null) header!,
-                  if (showPageIndicator &&
-                      appdata.settings[64] == "0" &&
-                      logic.maxPage != 1)
-                    buildPageSelector(context, logic),
-                  SliverGrid(
-                    delegate: SliverChildBuilderDelegate(
-                        childCount: comics.length, (context, i) {
-                      return buildItem(context, comics[i]);
-                    }),
-                    gridDelegate: SliverGridDelegateWithComics(),
-                  ),
-                  if (showPageIndicator &&
-                      appdata.settings[64] == "0" &&
-                      logic.maxPage != 1)
-                    buildPageSelector(context, logic),
-                  SliverPadding(
-                      padding: EdgeInsets.only(
-                          bottom: MediaQuery.of(context).padding.bottom))
-                ],
-              );
-
-              body = NotificationListener<ScrollUpdateNotification>(
-                onNotification: (notifications) {
-                  if (notifications.scrollDelta != null) {
-                    if (notifications.scrollDelta! > 0 &&
-                        logic.showFloatingButton) {
-                      logic.showFloatingButton = false;
-                      logic.update();
-                    } else if ((notifications.scrollDelta! < 0 ||
-                            notifications.metrics.pixels ==
-                                notifications.metrics.minScrollExtent ||
-                            notifications.metrics.pixels ==
-                                notifications.metrics.maxScrollExtent) &&
-                        !logic.showFloatingButton) {
-                      logic.showFloatingButton = true;
-                      logic.update();
-                    }
-                  }
-                  return false;
-                },
-                child: body,
-              );
-
-              if (showPageIndicator && appdata.settings[64] == "1") {
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: body,
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 12,
-                      top: 0,
-                      bottom: 0,
-                      child: buildPageSelectorRight(context, logic),
-                    )
+                    if (logic.current < (logic.maxPage ?? 114514) &&
+                        logic.loadingData)
+                      const SliverToBoxAdapter(
+                        child: ListLoadingIndicator(),
+                      )
+                    else
+                      const SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 80,
+                        ),
+                      )
                   ],
                 );
               } else {
-                return body;
+                List<T> comics = [];
+                if (appdata.appSettings.fullyHideBlockedWorks) {
+                  for (var comic in logic.dividedComics![logic.current]!) {
+                    if (isBlocked(comic) == null) {
+                      comics.add(comic);
+                    }
+                  }
+                } else {
+                  comics = logic.dividedComics![logic.current]!;
+                }
+                if (comics.isEmpty) {
+                  return SmoothCustomScrollView(
+                    slivers: [
+                      if (title != null)
+                        SliverAppbar(
+                          title: Text(title!),
+                          actions: tailing != null ? [tailing!] : null,
+                        ),
+                      if (header != null) header!,
+                      if (showPageIndicator &&
+                          (logic.maxPage != 1 || logic.current > 1))
+                        buildPageSelector(context, logic),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: buildEmptyView(context),
+                      ),
+                    ],
+                  );
+                }
+                Widget body = SmoothCustomScrollView(
+                  slivers: [
+                    if (title != null)
+                      SliverAppbar(
+                        title: Text(title!),
+                        actions: tailing != null ? [tailing!] : null,
+                      ),
+                    if (header != null) header!,
+                    if (showPageIndicator &&
+                        appdata.settings[64] == "0" &&
+                        (logic.maxPage != 1 || logic.current > 1))
+                      buildPageSelector(context, logic),
+                    SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                          childCount: comics.length, (context, i) {
+                        return buildItem(context, comics[i]);
+                      }),
+                      gridDelegate: SliverGridDelegateWithComics(),
+                    ),
+                    if (showPageIndicator &&
+                        appdata.settings[64] == "0" &&
+                        (logic.maxPage != 1 || logic.current > 1))
+                      buildPageSelector(context, logic),
+                    SliverPadding(
+                        padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).padding.bottom))
+                  ],
+                );
+
+                body = NotificationListener<ScrollUpdateNotification>(
+                  onNotification: (notifications) {
+                    if (notifications.scrollDelta != null) {
+                      if (notifications.scrollDelta! > 0 &&
+                          logic.showFloatingButton) {
+                        logic.showFloatingButton = false;
+                        logic.update();
+                      } else if ((notifications.scrollDelta! < 0 ||
+                              notifications.metrics.pixels ==
+                                  notifications.metrics.minScrollExtent ||
+                              notifications.metrics.pixels ==
+                                  notifications.metrics.maxScrollExtent) &&
+                          !logic.showFloatingButton) {
+                        logic.showFloatingButton = true;
+                        logic.update();
+                      }
+                    }
+                    return false;
+                  },
+                  child: body,
+                );
+
+                if (showPageIndicator && appdata.settings[64] == "1") {
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: body,
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: buildPageSelectorRight(context, logic),
+                      )
+                    ],
+                  );
+                } else {
+                  return body;
+                }
               }
             }
           }
+
+          final list = buildList();
+          if (!_multiSelectEnabled) return list;
+          final paged = appdata.settings[25] != '0';
+          final items =
+              paged ? (logic.dividedComics?[logic.current]) : logic.comics;
+          final available = <FavoriteItem>[];
+          for (final item in items ?? <T>[]) {
+            if (isBlocked(item) != null) continue;
+            final tile = buildComicTile(context, item, sourceKey);
+            if (tile is ComicTile && tile.favoriteItem != null) {
+              available.add(tile.favoriteItem!);
+            }
+          }
+          return ComicSelectionRegion(
+            controller: logic.selection,
+            available: available,
+            paged: paged,
+            child: list,
+          );
         });
 
     if (header != null && UiMode.m1(context)) {
@@ -492,24 +575,26 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
   }
 
   void nextPage(ComicsPageLogic logic) {
-    if (logic.current == logic.maxPage || logic.current == 0) {
+    if (logic.selection.busy) return;
+    if ((logic.maxPage != null && logic.current >= logic.maxPage!) ||
+        logic.current == 0) {
       showToast(message: "已经是最后一页了".tl);
     } else {
-      logic.current++;
-      logic.update();
+      logic.changePage(logic.current + 1);
     }
   }
 
   void prevPage(ComicsPageLogic logic) {
+    if (logic.selection.busy) return;
     if (logic.current == 1 || logic.current == 0) {
       showToast(message: "已经是第一页了".tl);
     } else {
-      logic.current--;
-      logic.update();
+      logic.changePage(logic.current - 1);
     }
   }
 
   void selectPage(ComicsPageLogic logic) async {
+    if (logic.selection.busy) return;
     String res = "";
     await showDialog(
         context: App.globalContext!,
@@ -552,8 +637,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
     if (res.isNum) {
       int i = int.parse(res);
       if (logic.maxPage == null || (i > 0 && i <= logic.maxPage!)) {
-        logic.current = i;
-        logic.update();
+        logic.changePage(i);
         return;
       }
     }

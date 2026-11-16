@@ -11,6 +11,7 @@ import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/foundation/cache_manager.dart';
 import 'package:pica_comic/foundation/history.dart';
+import 'package:pica_comic/foundation/import_database.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/network/cookie_jar.dart';
@@ -399,115 +400,174 @@ Future<bool> runExportData(bool includeDownload) async {
   return true;
 }
 
-/// import data, filePath is used for webdav
+/// An explicit path is used by WebDAV and checks the data version.
 Future<bool> importData([String? filePath]) async {
-  final enableCheck = filePath != null;
-  var path = (await getApplicationSupportDirectory()).path;
-  if (filePath == null) {
-    if (App.isMobile) {
-      var params = const OpenFileDialogParams();
-      filePath = await FlutterFileDialog.pickFile(params: params);
-    } else {
-      const XTypeGroup typeGroup = XTypeGroup(
-        label: 'data',
-      );
-      final XFile? file =
-          await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
-      filePath = file?.path;
-    }
-    if (filePath == null) {
-      LogManager.addLog(LogLevel.error, "importData", "filePath is null");
-      return false;
-    }
-  }
-  SingleInstanceCookieJar.instance?.dispose();
-  DownloadManager().dispose();
-  String data = '';
+  final checkVersion = filePath != null;
   try {
-    data = await compute<List<String>, String>((data) async {
-      var path = data[0];
-      ZipFile.openAndExtract(data[1], "$path/dataTemp");
-      var downloadPath = Directory(data[2]);
-      List<FileSystemEntity> contents = Directory("$path/dataTemp").listSync();
-      for (FileSystemEntity item in contents) {
-        if (item is Directory) {
-          if (item.name != "comic_source" && item.name != "download") {
-            item.renameSync('$path/dataTemp/download');
-          }
-        }
-      }
-      final json = File("$path/dataTemp/appdata").readAsStringSync();
-      int fileVersion = int.parse(
-          ((const JsonDecoder().convert(json))["settings"] as List)
-                  .elementAtOrNull(46) ??
-              "1");
-      if (fileVersion <= int.parse(data[3]) && data[4] == "1") {
-        return json;
-      }
-      var localFavorite = File('$path/dataTemp/localFavorite');
-      if (localFavorite.existsSync()) {
-        localFavorite.copySync('$path/localFavorite');
+    if (filePath == null) {
+      if (App.isMobile) {
+        filePath = await FlutterFileDialog.pickFile(
+            params: const OpenFileDialogParams());
       } else {
-        var localFavorite2 = File('$path/dataTemp/local_favorite.db');
-        localFavorite2.copySync('$path/local_favorite_temp.db');
+        filePath = (await openFile(acceptedTypeGroups: const [
+          XTypeGroup(label: 'data'),
+        ]))?.path;
       }
-      var history = File('$path/dataTemp/history.db');
-      if (history.existsSync()) {
-        history.copySync('$path/history_temp.db');
-      }
-      var comicSource = Directory('$path/dataTemp/comic_source');
-      if (comicSource.existsSync()) {
-        Directory("$path/comic_source").deleteSync(recursive: true);
-        comicSource.renameSync('$path/comic_source');
-      }
-      var cookies = File('$path/dataTemp/cookies.db');
-      if (cookies.existsSync()) {
-        cookies.copySync('$path/cookies.db');
-      }
-      var downloadData = Directory("$path/dataTemp/download");
-      if (downloadData.existsSync()) {
-        downloadPath.deleteSync(recursive: true);
-        downloadPath.createSync();
-        await moveDirectory(downloadData, downloadPath);
-      }
-      return json;
-    }, [
-      path,
-      filePath,
-      DownloadManager().path!,
-      appdata.settings[46],
-      (enableCheck ? "1" : "0")
-    ]);
+    }
+    if (filePath == null) return false;
+    return await importDataFromFile(filePath, checkVersion: checkVersion);
   } catch (e, s) {
     Log.error("importData", "$e\n$s");
     return false;
-  } finally {
-    await ComicSource.reload();
-    SingleInstanceCookieJar.instance?.init();
-    await DownloadManager().init();
-    Directory("$path/dataTemp").deleteSync(recursive: true);
   }
-  var json = const JsonDecoder().convert(data);
-  int fileVersion =
-      int.parse((json["settings"] as List).elementAtOrNull(46) ?? "1");
-  int appVersion = int.parse(appdata.settings[46]);
-  if (fileVersion <= appVersion && enableCheck) {
-    LogManager.addLog(
-        LogLevel.info,
-        "Appdata",
-        "The data file version is $fileVersion, while the app data version is "
-            "$appVersion\nStop importing data");
-  }
-  var dataReadRes = appdata.readDataFromJson(json);
-  if (!dataReadRes) {
-    LogManager.addLog(
-        LogLevel.error, "Appdata", "appdata.readDataFromJson(json) failed");
+}
+
+bool _importInProgress = false;
+
+/// The manual picker bypasses WebDAV's newer-version check. Keeping the file
+/// operation separate also lets device tests use neutral, generated archives.
+Future<bool> importDataFromFile(String filePath,
+    {bool checkVersion = true}) async {
+  if (_importInProgress) return false;
+  _importInProgress = true;
+  Directory? staging;
+  var cookieClosed = false;
+  var downloadsClosed = false;
+  try {
+    final path = App.dataPath;
+    staging = await Directory(path).createTemp('data-import-');
+    final stagePath = staging.path;
+    final data = await Isolate.run(() => _extractImport(filePath, stagePath));
+    final json = jsonDecode(data) as Map<String, dynamic>;
+    final settings = List<String>.from(json['settings']);
+    final fileVersion = int.parse(settings.elementAtOrNull(46) ?? '1');
+    if (checkVersion && fileVersion <= int.parse(appdata.settings[46])) {
+      return true; // A stale WebDAV export must not overwrite local settings.
+    }
+
+    // Do not overwrite files left by an interrupted previous import.
+    await LocalFavoritesManager().readData();
+    await HistoryManager().tryUpdateDb();
+    final hasCookies = File('$stagePath/cookies.db').existsSync();
+    final hasDownloads = Directory('$stagePath/download').existsSync();
+    final hasSources = Directory('$stagePath/comic_source').existsSync();
+    final downloadPath = DownloadManager().path;
+    if (hasDownloads && downloadPath == null) {
+      throw StateError('Download directory is not initialized');
+    }
+    if (hasCookies && SingleInstanceCookieJar.instance != null) {
+      SingleInstanceCookieJar.instance!.dispose();
+      cookieClosed = true;
+    }
+    if (hasDownloads) {
+      DownloadManager().dispose();
+      downloadsClosed = true;
+    }
+    await Isolate.run(() => _installImportFiles(stagePath, path, downloadPath));
+    if (cookieClosed) {
+      SingleInstanceCookieJar.instance!.init();
+      cookieClosed = false;
+    }
+    if (downloadsClosed) {
+      await DownloadManager().init();
+      downloadsClosed = false;
+    }
+    if (hasSources) await ComicSource.reload();
+    await LocalFavoritesManager().readData();
+    await HistoryManager().tryUpdateDb();
+    if (!await appdata.readDataFromJson(json)) return false;
+    LocalFavoritesManager().updateUI();
+    return true;
+  } catch (e, s) {
+    Log.error('importData', '$e\n$s');
     return false;
+  } finally {
+    try {
+      if (cookieClosed) SingleInstanceCookieJar.instance?.init();
+    } catch (e, s) {
+      Log.error('importData.cookies', '$e\n$s');
+    }
+    try {
+      if (downloadsClosed) await DownloadManager().init();
+    } catch (e, s) {
+      Log.error('importData.downloads', '$e\n$s');
+    }
+    try {
+      if (staging != null && staging.existsSync()) {
+        await staging.delete(recursive: true);
+      }
+    } catch (e, s) {
+      Log.error('importData.cleanup', '$e\n$s');
+    }
+    _importInProgress = false;
   }
-  await LocalFavoritesManager().readData();
-  LocalFavoritesManager().updateUI();
-  await HistoryManager().tryUpdateDb();
-  return true;
+}
+
+String _extractImport(String filePath, String staging) {
+  final zip = ZipFile.openRead(filePath);
+  try {
+    for (final entry in zip.getAllEntries()) {
+      final name = entry.name.replaceAll('\\', '/');
+      if (name.startsWith('/') || name.contains(':') ||
+          name.split('/').contains('..')) {
+        throw const FormatException('Invalid archive path');
+      }
+    }
+  } finally {
+    zip.close();
+  }
+  ZipFile.openAndExtract(filePath, staging);
+  final data = File('$staging/appdata').readAsStringSync();
+  final json = jsonDecode(data) as Map<String, dynamic>;
+  final settings = List<String>.from(json['settings']);
+  if (settings.isEmpty) throw const FormatException('Missing settings');
+  int.parse(settings.elementAtOrNull(46) ?? '1');
+  List<String>.from(json['firstUse']);
+  List<String>.from(json['blockingKeywords'] ?? []);
+  List<String>.from(json['favoriteTags'] ?? []);
+  if (File('$staging/localFavorite').existsSync()) {
+    jsonDecode(File('$staging/localFavorite').readAsStringSync()) as Map;
+  } else {
+    validateImportDatabase('$staging/local_favorite.db', favorites: true);
+  }
+  if (File('$staging/history.db').existsSync()) {
+    validateImportDatabase('$staging/history.db', favorites: false);
+  }
+  // Older exports used the original download directory's name.
+  for (final item in Directory(staging).listSync()) {
+    if (item is Directory && item.name != 'comic_source' &&
+        item.name != 'download') {
+      item.renameSync('$staging/download');
+    }
+  }
+  return data;
+}
+
+Future<void> _installImportFiles(
+    String staging, String path, String? downloadPath) async {
+  final legacy = File('$staging/localFavorite');
+  if (legacy.existsSync()) {
+    legacy.copySync('$path/localFavorite');
+  } else {
+    File('$staging/local_favorite.db').copySync('$path/local_favorite_temp.db');
+  }
+  final history = File('$staging/history.db');
+  if (history.existsSync()) history.copySync('$path/history_temp.db');
+  final sources = Directory('$staging/comic_source');
+  if (sources.existsSync()) {
+    final current = Directory('$path/comic_source');
+    if (current.existsSync()) current.deleteSync(recursive: true);
+    sources.renameSync(current.path);
+  }
+  final cookies = File('$staging/cookies.db');
+  if (cookies.existsSync()) cookies.copySync('$path/cookies.db');
+  final downloads = Directory('$staging/download');
+  if (downloads.existsSync()) {
+    final current = Directory(downloadPath!);
+    if (current.existsSync()) current.deleteSync(recursive: true);
+    current.createSync(recursive: true);
+    await moveDirectory(downloads, current);
+  }
 }
 
 void saveLog(String log) async {

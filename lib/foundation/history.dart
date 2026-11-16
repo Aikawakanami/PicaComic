@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/log.dart';
+import 'package:pica_comic/foundation/import_database.dart';
 import 'package:pica_comic/network/webdav.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -196,46 +197,12 @@ class HistoryManager {
           LogLevel.info, "HistoryManager.tryUpdateDb", "db file not exist");
       return;
     }
-    var db = sqlite3.open(file.path);
-    var newHistory0 = db.select("""
-      select * from history
-      order by time DESC;
-    """);
-    var newHistory =
-        newHistory0.map((element) => History.fromRow(element)).toList();
-    if (file.existsSync()) {
-      var skips = 0;
-      for (var history in newHistory) {
-        if (findSync(history.target) == null) {
-          addHistory(history);
-          LogManager.addLog(LogLevel.info, "HistoryManager",
-              "merge history ${history.target}");
-        } else {
-          skips++;
-        }
-      }
-      LogManager.addLog(LogLevel.info, "HistoryManager",
-          "merge history, skipped $skips, added ${newHistory.length - skips}");
-
-      //import favorite images
-      skips = 0;
-      ImageFavoriteManager.init();
-      var newImages0 = db.select("select * from image_favorites;");
-      var newImages = newImages0.map((e) =>
-          ImageFavorite(e["id"], e["cover"], e["title"], e["ep"], e["page"], jsonDecode(e["other"]))).toList();
-      for (var image in newImages) {
-        if (ImageFavoriteManager.exist(image.id, image.ep, image.page)) {
-          skips++;
-        } else {
-          ImageFavoriteManager.add(image);
-          LogManager.addLog(LogLevel.info, "HistoryManager",
-              "merge favorite image ep ${image.ep} page ${image.page} @ ${image.id}");
-        }
-      }
-      LogManager.addLog(LogLevel.info, "HistoryManager",
-          "merge favorite images, skipped $skips, added ${newImages.length - skips}");
-    }
-    db.dispose();
+    final result = await mergeHistoryDatabases(
+        "${App.dataPath}/history.db", file.path);
+    updateCache();
+    Future.microtask(() => StateController.findOrNull(tag: "me_page")?.update());
+    LogManager.addLog(LogLevel.info, "HistoryManager.tryUpdateDb",
+        "Imported ${result.$1} history records and ${result.$2} image favorites");
     file.deleteSync();
   }
 
@@ -276,6 +243,13 @@ class HistoryManager {
     }
 
     ImageFavoriteManager.init();
+    // Resume an interrupted import without blocking the rest of initialization
+    // on a corrupt pending file. Successful transactions are safe to retry.
+    try {
+      await tryUpdateDb();
+    } catch (e, s) {
+      LogManager.addLog(LogLevel.error, "HistoryManager.recoverImport", "$e\n$s");
+    }
   }
 
   void readDataFromJson(List<dynamic> json) {

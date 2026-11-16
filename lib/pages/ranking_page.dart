@@ -93,6 +93,9 @@ class _RankingPageState extends State<RankingPage> {
 }
 
 class _CustomCategoryComicsList extends ComicsPage<BaseComic> {
+  @override
+  bool get enableMultiSelect => true;
+
   const _CustomCategoryComicsList({
     super.key,
     required this.loader,

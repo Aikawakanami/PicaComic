@@ -1,17 +1,19 @@
 # 有源码依据的风险与待核实项
 
-[返回知识库](README.md)。这是首轮分析的候选清单，不是已运行复现的缺陷报告，也不代表已经授权实施修复。每项将静态事实、潜在影响和建议验证分开；本轮未修改业务代码。
+[返回知识库](README.md)。这是首轮分析形成的候选清单，不代表每项均已复现或获授权修复。每项将静态事实、潜在影响和执行证据分开；首轮未修改业务代码，后续独立授权的实施进度在对应条目维护。
 
 ## KB-01：有效业务测试与自动检查缺口
 
-- 【已实现：静态依据】`test/widget_test.dart → main` 为空；已读 `.github/workflows/main.yml / linux.yml / ios_simulator.yml` 仅手动构建与上传，没有 `flutter analyze / flutter test`。仓库未发现其他已跟踪的测试文件。
-- 【推测／待核实】阅读位置、下载恢复、数据导入和源契约改动目前缺少仓库内自动回归证据；不能据此推断项目无法运行。
-- 【建议】后续实际修改时，为该行为补最小有效验证；优先覆盖下面的身份冲突、无章节源与图片 hook，不为本轮文档任务新增业务测试。
+- 【已实现：静态依据】原 `test/widget_test.dart → main` 仍为空；多选功能新增 `test/comic_selection_test.dart` 、`integration_test/multi_select_favorites_test.dart` 和 `integration_test/data_import_test.dart`。已读 `.github/workflows/main.yml / linux.yml / ios_simulator.yml` 仍仅手动构建与上传，没有 `flutter analyze / flutter test`。
+- 【推测／待核实】阅读位置、下载恢复和源契约改动目前缺少仓库内自动回归证据；不能据此推断项目无法运行。
+- 【已验证：执行证据】多选状态/布局的 8 项回归通过；当前 Android 真机已通过五源通用搜索、翻页、分类/排行/探索入口、连续追加及实际收藏 SQLite 的 5 组集成场景，另有 1 组关键词/排序/漫画源切换场景通过。范围、命令和验证限制见[多选变更](changes/2026-11-16-multi-select-favorites.md)。另有大库 SQLite 导入/历史暂存恢复的 4 组真机回归通过，见[导入恢复](changes/2026-11-16-data-import-recovery.md)。这些证据不覆盖阅读、下载或全部旧格式迁移。
+- 【建议】后续实际修改时继续补相应回归；无章节源与图片 hook 仍需独立验证。
 
 ## KB-02：跨源身份及收藏查重规则不一致
 
-- 【已实现：静态依据】`lib/foundation/history.dart → HistoryManager.init / addHistory / findSync` 以 `target` 单独建主键和查询；`lib/foundation/local_favorites.dart → createFolder` 使用 `(target,type)` 主键，但 `addComic` 前置检查只用 target。两个模型的类型编码还不同，见[数据模型](data-model.md)。
-- 【推测／待核实】两个来源返回相同 target 时，历史可能复用另一来源记录；收藏可能在进入复合主键写入前被错误判重。没有使用真实收藏数据验证这一影响。
+- 【已实现：静态依据】`lib/foundation/history.dart → HistoryManager.init / addHistory / findSync` 以 `target` 单独建主键和查询；本地收藏表使用 `(target,type)` 主键。本轮[多选收藏](changes/2026-11-16-multi-select-favorites.md)将单项及批量新增共用的 `_insertComic` 改为调用 `comicExists(folder, target, type)`，收藏写入的前置查重已与主键一致；`isExist / _cachedFavoritedTargets` 的徽标缓存仍只用 target。两个模型的类型编码还不同，见[数据模型](data-model.md)。
+- 【推测／待核实】两个来源返回相同 target 时，历史可能复用另一来源记录，收藏徽标也可能跨源误判；收藏写入修正不代表这些路径已经统一。没有使用真实收藏数据验证这些剩余影响。
+- 【已验证：执行证据】多选真机测试使用临时 SQLite，确认同 target 的 EH 类型与 JM 类型可分别新增；通过临时触发器注入部分失败，确认成功项保留、失败项可单独重试。未迁移数据库，也未使用个人收藏数据。
 - 【建议】用两个不同源但相同 target 的最小数据核对创建、读取、列表状态和备份合并，再决定是否需要一致的复合身份和迁移；不要只改建表语句。
 
 ## KB-03：无章节自定义源的可空契约不一致
@@ -43,6 +45,18 @@
 - 【已实现：静态依据】`lib/network/app_dio.dart → AppHttpAdapter.fetchOnce` 记录请求 headers／data；`MyLogInterceptor.onResponse` 记录响应头／正文，移除的是 `cookie` 而非所有认证头；`lib/foundation/log.dart → LogManager.addLog / writeLog` 可写文件。`lib/tools/io_tools.dart → _exportData` 还打包源状态、Cookie 和含 WebDAV 配置的 appdata，调用路径没有显式加密步骤。
 - 【推测／待核实】日志或同步包可能含认证数据；本轮没有读取真实凭据、检查真实产物或进行安全渗透测试。
 - 【建议】未来涉及日志导出／备份时，用合成认证字段核对实际产物，再确认脱敏与备份范围需求。TLS 例外已在[接口页](api-integrations.md#公共网络栈)单独记录，未完成全面网络安全审计。
+
+## KB-08：大库导入的逐条副作用与恢复缺口（本轮修复）
+
+- 【已实现：静态依据】原收藏导入逐条刷新/保存并并发缓存封面；原历史导入逐条重建全量缓存，且启动不恢复 `history_temp.db`。现由 `lib/foundation/import_database.dart` 在后台事务合并，成功后刷新一次，不预缓存整库封面；`HistoryManager.init` 尝试恢复暂存库。导入 UI 在 finally 关闭等待窗口。
+- 【已验证：执行证据】独立 Android 包 25,231 条收藏的导入约 533 ms，事件循环仍响应；重复导入、事务回滚、错误重试及 7,028 条历史/6 条图片收藏的启动恢复通过。用户指定的备份也已通过正常界面成功导入，逐条身份核对一致，冷启动进入应用。原导出哈希未改变。
+- 【推测／待核实】没有完整复现用户最初的白屏过程；此修复不保证所有异常源、下载载荷、并发同步或跨库/文件的整包原子性，早期 JSON 迁移另需验证。实现和环境隔离事故记录见[导入恢复](changes/2026-11-16-data-import-recovery.md)。
+
+## KB-09：动态远端列表缺少浏览快照与连续追加去重
+
+- 【已实现：静态依据】`ComicsPageLogic.loadNextPage` 直接追加响应，`dividedComics` 缓存已访问页；没有跨页列表去重或远端删除校验。该方法在 `Res.error` 后仍递增 `current`。分页读取的总页数和当前页重试已随[跨页选择](changes/2026-11-16-cross-page-selection.md)调整，缓存页仍不主动刷新。EH 主页/搜索另有下一页链接与页面缓存，不能按普通页码源一概而论。
+- 【推演／待核实】页码源实时列表增删/重排可能造成重复、漏项和缓存陈旧；失败页可能被跳过。分析依据与具体示例见[业务流程](business-flows.md#远程列表变化与分页一致性)，未在真实源执行增删测试。
+- 【建议】若另行授权修正，可先验证失败后重试同一页、连续列表按来源+ID 去重；去重不能补回已遗漏条目，稳定游标/快照仍需漫画源支持。当前没有改动相关业务代码。
 
 ## 开发前需消除的环境不确定性
 

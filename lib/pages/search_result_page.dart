@@ -14,6 +14,9 @@ import 'package:pica_comic/tools/tags_translation.dart';
 import 'package:pica_comic/tools/translations.dart';
 
 class _SearchPageComicList extends ComicsPage<BaseComic> {
+  @override
+  bool get enableMultiSelect => true;
+
   const _SearchPageComicList({
     super.key,
     required this.keyword,

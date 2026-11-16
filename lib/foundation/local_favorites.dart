@@ -6,6 +6,7 @@ import 'package:pica_comic/base.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/image_manager.dart';
+import 'package:pica_comic/foundation/import_database.dart';
 import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/network/download.dart';
 import 'package:pica_comic/network/eh_network/eh_main_network.dart';
@@ -284,6 +285,13 @@ extension SQL on String {
   String get toParam => replaceAll('\'', "''").replaceAll('"', "\"\"");
 }
 
+/// Database outcomes; a cover-cache failure does not undo a saved favorite.
+class FavoriteBatchResult {
+  final added = <FavoriteItem>[];
+  final existing = <FavoriteItem>[];
+  final failed = <FavoriteItem>[];
+}
+
 class LocalFavoritesManager {
   factory LocalFavoritesManager() =>
       cache ?? (cache = LocalFavoritesManager._create());
@@ -400,8 +408,8 @@ class LocalFavoritesManager {
 
   /// read data from json file or temp db.
   ///
-  /// This function will delete current database, then create a new one, finally
-  /// import data.
+  /// SQLite imports merge atomically; the pending file survives a failed merge.
+  /// The legacy JSON migration below retains its original replacement behavior.
   Future<void> readData() async {
     var file = File("${App.dataPath}/localFavorite");
     if (file.existsSync()) {
@@ -437,57 +445,13 @@ class LocalFavoritesManager {
       }
     } else if ((file = File("${App.dataPath}/local_favorite_temp.db"))
         .existsSync()) {
-      var tmp_db = sqlite3.open(file.path);
-
-      final folders = tmp_db
-          .select("SELECT name FROM sqlite_master WHERE type='table';")
-          .map((element) => element["name"] as String)
-          .toList();
-      folders.remove('folder_sync');
-      folders.remove('folder_order');
+      final added = await mergeFavoriteDatabases(
+          "${App.dataPath}/local_favorite.db", file.path,
+          appdata.settings[53] == "0");
+      _modifiedAfterLastCache = true;
+      updateUI();
       LogManager.addLog(LogLevel.info, "LocalFavoritesManager.readData",
-          "read folders from local database $folders");
-      var folderToOrder = <String, int>{};
-      for (var folder in folders) {
-        var res = tmp_db.select("""
-        select * from folder_order
-        where folder_name == ?;
-      """, [folder]);
-        if (res.isNotEmpty) {
-          folderToOrder[folder] = res.first["order_value"];
-        } else {
-          folderToOrder[folder] = 0;
-        }
-      }
-      folders.sort((a, b) {
-        return folderToOrder[a]! - folderToOrder[b]!;
-      });
-      var res = <FavoriteItemWithFolderInfo>[];
-      for (final folder in folders) {
-        var comics = tmp_db.select("""
-        select * from "$folder";
-      """);
-        LogManager.addLog(LogLevel.info, "LocalFavoritesManager.readData",
-            "read $folder gets ${comics.length} comics");
-        res.addAll(comics.map((element) =>
-            FavoriteItemWithFolderInfo(FavoriteItem.fromRow(element), folder)));
-      }
-      var skips = 0;
-      for (var comic in res) {
-        if (!folderNames.contains(comic.folder)) {
-          createFolder(comic.folder);
-        }
-        if (!comicExists(comic.folder, comic.comic.target, comic.comic.type.key)) {
-          addComic(comic.folder, comic.comic);
-          LogManager.addLog(LogLevel.info, "LocalFavoritesManager",
-              "add comic ${comic.comic.target} to ${comic.folder}");
-        } else {
-          skips++;
-        }
-      }
-      LogManager.addLog(LogLevel.info, "LocalFavoritesManager",
-          "skipped $skips comics, total ${res.length}");
-      tmp_db.dispose();
+          "Imported $added favorites in one transaction");
       file.deleteSync();
     } else {
       LogManager.addLog(LogLevel.info, "LocalFavoritesManager",
@@ -678,16 +642,20 @@ class LocalFavoritesManager {
   ///
   /// This method will download cover to local, to avoid problems like changing url
   void addComic(String folder, FavoriteItem comic, [int? order]) async {
+    if (!_insertComic(folder, comic, order)) return;
+    updateUI();
+    saveData();
+    await _cacheComicCover(comic);
+  }
+
+  /// Each record is independently committed; duplicate identity includes source type.
+  bool _insertComic(String folder, FavoriteItem comic, [int? order]) {
     _modifiedAfterLastCache = true;
     if (!folderNames.contains(folder)) {
       throw Exception("Folder does not exists");
     }
-    var res = _db.select("""
-      select * from "$folder"
-      where target == '${comic.target}';
-    """);
-    if (res.isNotEmpty) {
-      return;
+    if (comicExists(folder, comic.target, comic.type.key)) {
+      return false;
     }
     if (order != null) {
       _db.execute("""
@@ -708,8 +676,45 @@ class LocalFavoritesManager {
           '${comic.tags.join(',').toParam}', '${comic.coverPath.toParam}', '${comic.time.toParam}', ${minValue(folder) - 1});
       """);
     }
-    updateUI();
-    saveData();
+    return true;
+  }
+
+  Future<FavoriteBatchResult> addComicsToFolder(
+      String folder, Iterable<FavoriteItem> comics) async {
+    final result = FavoriteBatchResult();
+    final seen = <(int, String)>{};
+    for (final comic in comics) {
+      if (!seen.add((comic.type.key, comic.target))) continue;
+      try {
+        if (_insertComic(folder, comic)) {
+          result.added.add(comic);
+        } else {
+          result.existing.add(comic);
+        }
+      } catch (error, stack) {
+        result.failed.add(comic);
+        LogManager.addLog(
+            LogLevel.error, 'Batch local favorites', '$error\n$stack');
+      }
+      // Allow progress/busy UI to paint without waiting for thumbnail downloads.
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (result.added.isNotEmpty) {
+      updateUI();
+      saveData();
+      _cacheBatchCovers(result.added);
+    }
+    return result;
+  }
+
+  Future<void> _cacheBatchCovers(List<FavoriteItem> comics) async {
+    for (final comic in comics) {
+      await _cacheComicCover(comic);
+    }
+  }
+
+  Future<void> _cacheComicCover(FavoriteItem comic) async {
+    if (comic.coverPath.isEmpty) return;
     try {
       var file =
           (await (ImageManager().getImage(comic.coverPath)).last).getFile();

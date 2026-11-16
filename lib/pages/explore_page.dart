@@ -277,6 +277,9 @@ class _SingleExplorePageState extends StateWithController<_SingleExplorePage> {
 }
 
 class _ComicList extends ComicsPage<BaseComic> {
+  @override
+  bool get enableMultiSelect => true;
+
   const _ComicList(this.builder, this.tag, this.sourceKey);
 
   @override

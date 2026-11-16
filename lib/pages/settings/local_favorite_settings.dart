@@ -28,6 +28,12 @@ class _LocalFavoritesSettingsState extends State<LocalFavoritesSettings> {
             values: LocalFavoritesManager().folderNames,
           ),
         ),
+        SwitchSetting(
+          title: "多选收藏结果提示".tl,
+          subTitle: "显示新增、已存在和失败的数量".tl,
+          icon: const Icon(Icons.notifications_outlined),
+          settingsIndex: 90,
+        ),
         SelectSettingWithAppdata(
           icon: const Icon(Icons.bookmark_add),
           title: "新收藏添加至".tl,

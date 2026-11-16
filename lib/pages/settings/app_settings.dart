@@ -574,17 +574,16 @@ void importDataSetting(BuildContext context) {
               TextButton(
                   onPressed: () => App.globalBack(), child: Text("取消".tl)),
               TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     App.globalBack();
                     var dialog = showLoadingDialog(context, allowCancel: false);
-                    importData().then((v) {
+                    var success = false;
+                    try {
+                      success = await importData();
+                    } finally {
                       dialog.close();
-                      if (v) {
-                        showToast(message: "成功导入".tl);
-                      } else {
-                        showToast(message: "导入失败".tl);
-                      }
-                    });
+                      showToast(message: (success ? "成功导入" : "导入失败").tl);
+                    }
                   },
                   child: Text("继续".tl))
             ],

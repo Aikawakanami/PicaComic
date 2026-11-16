@@ -50,7 +50,18 @@ abstract class ComicTile extends StatelessWidget {
     );
   }
 
-  void onLongTap_() {
+  void onLongTap_() => _showLongTapMenu(null);
+
+  void _onLongTap(BuildContext tileContext) {
+    final selection = ComicSelectionScope.maybeOf(tileContext);
+    if (selection != null && favoriteItem != null) {
+      _showLongTapMenu(selection);
+    } else {
+      onLongTap_();
+    }
+  }
+
+  void _showLongTapMenu(ComicSelectionController? selection) {
     bool favorite = false;
     showDialog(
       context: App.globalContext!,
@@ -90,6 +101,15 @@ abstract class ComicTile extends StatelessWidget {
                           setState(() {
                             favorite = true;
                           });
+                        },
+                      ),
+                    if (selection != null && favoriteItem != null)
+                      ListTile(
+                        leading: const Icon(Icons.checklist),
+                        title: Text('多选'.tl),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          selection.begin(favoriteItem!);
                         },
                       ),
                     if (read != null)
@@ -232,6 +252,70 @@ abstract class ComicTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selection = ComicSelectionScope.maybeOf(context);
+    final comic = favoriteItem;
+    final child = _buildCard(context);
+    if (selection == null || !selection.active || comic == null) return child;
+    final selected = selection.isSelected(comic);
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: title,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: selection.busy ? null : () => selection.toggle(comic),
+        onLongPress: selection.busy ? null : () => selection.toggle(comic),
+        child: AbsorbPointer(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              child,
+              if (selected)
+                Positioned.fill(
+                  // Keep adjacent outlines apart even in grids with no spacing.
+                  left: 4,
+                  top: 4,
+                  right: 4,
+                  bottom: 4,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).colorScheme.primary.withAlpha(35),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 3,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  shape: const CircleBorder(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      selected
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     var type = appdata.settings[44].split(',').first;
     Widget child;
     bool detailedMode;
@@ -312,7 +396,7 @@ abstract class ComicTile extends StatelessWidget {
       return InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap_,
-          onLongPress: enableLongPressed ? onLongTap_ : null,
+          onLongPress: enableLongPressed ? () => _onLongTap(context) : null,
           onSecondaryTapDown: onSecondaryTap_,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 24, 8),
@@ -402,7 +486,8 @@ abstract class ComicTile extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onTap_,
-                  onLongPress: enableLongPressed ? onLongTap_ : null,
+                  onLongPress:
+                      enableLongPressed ? () => _onLongTap(context) : null,
                   onSecondaryTapDown: onSecondaryTap_,
                   borderRadius: BorderRadius.circular(8),
                   child: const SizedBox.expand(),

@@ -92,6 +92,8 @@ dependencies:
       ref: 3ef899b
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
 

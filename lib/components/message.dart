@@ -4,12 +4,18 @@ void hideAllMessages() {
   _OverlayWidgetState.removeAll();
 }
 
-void showToast({required String message, Widget? icon, Widget? trailing}) {
+void showToast({
+  required String message,
+  Widget? icon,
+  Widget? trailing,
+  bool atTop = false,
+}) {
   var newEntry = OverlayEntry(
       builder: (context) => _ToastOverlay(
             message: message,
             icon: icon,
             trailing: trailing,
+            atTop: atTop,
           ));
 
   _OverlayWidgetState.addOverlay(newEntry);
@@ -18,7 +24,12 @@ void showToast({required String message, Widget? icon, Widget? trailing}) {
 }
 
 class _ToastOverlay extends StatelessWidget {
-  const _ToastOverlay({required this.message, this.icon, this.trailing});
+  const _ToastOverlay({
+    required this.message,
+    this.icon,
+    this.trailing,
+    this.atTop = false,
+  });
 
   final String message;
 
@@ -26,14 +37,17 @@ class _ToastOverlay extends StatelessWidget {
 
   final Widget? trailing;
 
+  final bool atTop;
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+      top: atTop ? MediaQuery.paddingOf(context).top + 228 : null,
+      bottom: atTop ? null : 24 + MediaQuery.of(context).viewInsets.bottom,
       left: 0,
       right: 0,
       child: Align(
-        alignment: Alignment.bottomCenter,
+        alignment: atTop ? Alignment.topCenter : Alignment.bottomCenter,
         child: Material(
           color: Theme.of(context).colorScheme.surface,
           surfaceTintColor: Theme.of(context).colorScheme.surfaceTint,

@@ -210,9 +210,14 @@ class DownloadManager with _DownloadDb implements Listenable {
   Future<void> init() async {
     if (_runInit) return;
     _runInit = true;
-    await _getPath();
-    await _getInfo();
-    await _initDb();
+    try {
+      await _getPath();
+      await _getInfo();
+      await _initDb();
+    } catch (_) {
+      _runInit = false;
+      rethrow;
+    }
   }
 
   ///储存当前的下载队列信息, 每完成一张图片的下载调用一次
