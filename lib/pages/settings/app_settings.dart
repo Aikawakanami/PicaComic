@@ -760,7 +760,7 @@ void setCacheLimit() {
           actions: [
             Button.filled(
               child: Text("确认".tl),
-              onPressed: () {
+              onPressed: () async {
                 if (size < minSize) {
                   setState(() {
                     isValid = false;
@@ -769,8 +769,12 @@ void setCacheLimit() {
                 } else {
                   appdata.appSettings.cacheLimit = size;
                   appdata.writeData();
-                  CacheManager().setLimitSize(size);
                   App.globalBack();
+                  try {
+                    await CacheManager().setLimitSize(size);
+                  } catch (error) {
+                    Log.warning('Disk cache', 'Could not apply limit (${error.runtimeType})');
+                  }
                 }
               },
             ),

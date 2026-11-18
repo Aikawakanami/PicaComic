@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -34,10 +33,9 @@ extension _CachedNetwork on CachedNetwork {
       CookieJar? cookieJar}) async {
     await setNetworkProxy();
     final key = url;
-    var cache = await CacheManager().findCache(key);
+    var cache = await CacheManager().readCache(key);
     if (cache != null) {
-      var file = File(cache);
-      return CachedNetworkRes(await file.readAsString(), 200, url);
+      return CachedNetworkRes(utf8.decode(cache.bytes), 200, url);
     }
     options.responseType = ResponseType.bytes;
     var dio = logDio(options);

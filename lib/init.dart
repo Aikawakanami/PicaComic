@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:app_links/app_links.dart';
@@ -85,7 +86,11 @@ Future<void> init() async {
       HistoryManager().init(),
       AppTranslation.init(),
     ]);
-    CacheManager().setLimitSize(appdata.appSettings.cacheLimit);
+    unawaited(CacheManager()
+        .setLimitSize(appdata.appSettings.cacheLimit)
+        .catchError((Object error) {
+      Log.warning('Disk cache', 'Initialization failed (${error.runtimeType})');
+    }));
   } catch (e, s) {
     LogManager.addLog(
         LogLevel.error, "Init", "App initialization failed!\n$e$s");

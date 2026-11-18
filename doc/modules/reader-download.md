@@ -2,7 +2,7 @@
 
 - 范围：`lib/pages/reader/`、下载 manager／任务模型、图片 manager 与下载页读取入口。架构依赖见[架构](../architecture.md)，数据 ID／索引约束见[数据模型](../data-model.md)。
 - 分析状态：已分析章节选择、本地／网络分支、历史写回、队列与任务生命周期；手势、全部图片算法、平台交互仍为部分覆盖。
-- 证据类型：以下为【已实现：静态依据】，没有运行应用、下载图片或操作用户数据。
+- 证据类型：实现依据和验证范围分别标注。
 
 ## 阅读主路径
 
@@ -21,6 +21,10 @@
 ## 图片与缓存边界
 
 `lib/foundation/image_manager.dart → ImageManager` 是阅读和下载共用的图片获取层，`loadingItems` 跟踪正在加载的 key，`CacheManager` 管理磁盘缓存，ImageProvider 另有内存缓存。`getImage`、`getJmImage`、`getEhImageNew`、`getHitomiImage`、`getCustomImage` 是不同路径，不应将其中一个的请求头、重组或缓存 key 规则推广到全部来源。
+
+【已实现：静态依据】磁盘缓存以 `settings[35]` 的容量为上限，封面、阅读图片和部分网络响应共用。`lib/foundation/cache_manager.dart → _scanExistingFiles / _publish / _evictBatches` 按实际字节计量，超限分批淘汰，在没有进展时结束本轮。过期清理仍独立生效。固定 2,000 条门槛已取消。
+
+【已验证：执行证据】Android 14 将上限临时设为 16 MiB 后，真实 EH 单页在线阅读从第 1 页翻到第 99 页。早期图片的磁盘缓存被淘汰后，前翻、回翻以及重启后的重新加载均通过。原因复现、测试步骤和边界见[缓存修复记录](../changes/2026-11-18-disk-cache-capacity.md)。
 
 已核对 JM 的 `getJmImage` 会去掉 URL 查询参数作为 key，非 GIF 经过 `startRecombineAndWriteImage` 再落盘；重组算法内部仍未分析。自定义在线图片支持请求改写及 JS `onResponse` 转换，其结果必须是 Uint8List；下载路径的能力差异见[技术债](../technical-debt.md)。
 
@@ -49,4 +53,4 @@
 
 ## 验证与未知项
 
-本轮未运行 Flutter／Dart（PATH 不可发现），仓库没有有效业务测试。待验证：无章节自定义源、下载期间切换页面、暂停／取消／重试竞态、队列中断写入、源禁用后离线阅读、缺图文件、双页边界与资源释放。相关候选问题仅记录在[技术债](../technical-debt.md)，本轮没有实施修复。
+首轮分析未运行 Flutter／Dart。缓存修复的后续验证见上文。待验证：无章节自定义源、下载期间切换页面、暂停／取消／重试竞态、队列中断写入、源禁用后离线阅读、缺图文件、双页边界与资源释放。相关候选问题仅记录在[技术债](../technical-debt.md)。

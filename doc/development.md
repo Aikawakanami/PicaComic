@@ -134,3 +134,9 @@ flutter test
 正常入口构建、包名核对、当前应用完整数据备份及 ADB `install -r` 更新完成，启动请求返回 Status: ok。当前普通测试版支持跨页选择，提示顶部偏移为安全区域下 228 个逻辑像素；APK 为 `build/app/outputs/multiselect/PicaComic-cross-page-selection-debug.apk`。实际网站和真机交互仍交由用户验收，不用本地模拟通过代替真机验收。
 
 【已验证：用户反馈】用户在最新大图标与全不选版本安装后确认测试通过，并授权汇总提交到个人仓库 dev；该验收记录见[跨页选择变更](changes/2026-11-16-cross-page-selection.md#用户验收与仓库交付2026-11-16)。本机自动安装记录保留执行时的 user_pending 状态，其后的用户确认以本段和变更记录为准。
+
+## 磁盘缓存回归与真机验收（2026-11-18）
+
+【已验证：执行证据】缓存回归入口为 `flutter test --no-pub test/cache_manager_test.dart`。Windows 测试进程可通过 `PICA_TEST_SQLITE3` 指向已有 SQLite DLL。测试使用临时缓存目录和 SQLite 库，通过测试接口降低容量，覆盖界面最小值以下的压力场景。
+
+【已验证：执行证据】Android 合成压力测试在独立包运行。真实 EH 验收使用正常入口的 Android 14 测试版，临时隔离该应用的磁盘缓存和索引，并恢复原设置、缓存和索引。各场景的验证结果见[缓存修复记录](changes/2026-11-18-disk-cache-capacity.md)。

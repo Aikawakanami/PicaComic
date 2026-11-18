@@ -21,7 +21,6 @@ import 'package:pica_comic/tools/file_type.dart';
 import '../base.dart';
 import '../network/eh_network/eh_main_network.dart';
 import '../network/hitomi_network/image.dart';
-import '../network/jm_network/jm_network.dart';
 import '../network/jm_network/headers.dart';
 import '../network/res.dart';
 
@@ -65,10 +64,10 @@ class ImageManager {
 
     try {
       final key = url;
-      var cache = await CacheManager().findCache(key);
+      var cache = await CacheManager().readCache(key);
       if (cache != null) {
         yield DownloadProgress(
-            1, 1, url, cache, null, CacheManager().getType(key));
+            1, 1, url, cache.path, cache.bytes, cache.type);
         loadingItems.remove(url);
         return;
       }
@@ -118,9 +117,8 @@ class ImageManager {
         yield progress;
         loadingItems[url] = progress;
       }
-      await cachingFile.close();
       var ext = getExt(dioRes);
-      CacheManager().setType(key, ext);
+      await cachingFile.close(type: ext);
       yield DownloadProgress(
         imageData.length,
         imageData.length,
@@ -161,10 +159,10 @@ class ImageManager {
 
     try {
       final key = cacheKey;
-      var cache = await CacheManager().findCache(key);
+      var cache = await CacheManager().readCache(key);
       if (cache != null) {
         yield DownloadProgress(
-            1, 1, key, cache, null, CacheManager().getType(key));
+            1, 1, key, cache.path, cache.bytes, cache.type);
         loadingItems.remove(key);
         return;
       }
@@ -425,9 +423,8 @@ class ImageManager {
         }
       }
 
-      await cachingFile.close();
       var ext = detectFileType(data).ext.replaceFirst(('.'), '');
-      CacheManager().setType(key, ext);
+      await cachingFile.close(type: ext);
       yield DownloadProgress(
         totalBytes,
         totalBytes,
@@ -462,10 +459,10 @@ class ImageManager {
 
     try {
       final key = image.hash;
-      var cache = await CacheManager().findCache(key);
+      var cache = await CacheManager().readCache(key);
       if (cache != null) {
         yield DownloadProgress(
-            1, 1, key, cache, null, CacheManager().getType(key));
+            1, 1, key, cache.path, cache.bytes, cache.type);
         loadingItems.remove(key);
         return;
       }
@@ -513,9 +510,8 @@ class ImageManager {
         yield progress;
         loadingItems[image.hash] = progress;
       }
-      await cachingFile.close();
       var ext = getExt(res);
-      CacheManager().setType(key, ext);
+      await cachingFile.close(type: ext);
       yield DownloadProgress(currentBytes, currentBytes, url, savePath,
           Uint8List.fromList(data), ext);
     } catch (e) {
@@ -545,10 +541,10 @@ class ImageManager {
 
     try {
       final key = urlWithoutParam;
-      var cache = await CacheManager().findCache(key);
+      var cache = await CacheManager().readCache(key);
       if (cache != null) {
-        yield DownloadProgress(1, 1, url, cache);
-        loadingItems.remove(url);
+        yield DownloadProgress(1, 1, url, cache.path, cache.bytes, cache.type);
+        loadingItems.remove(urlWithoutParam);
         return;
       }
 
@@ -596,8 +592,7 @@ class ImageManager {
             Uint8List.fromList(bytes), epsId, scrambleId, bookId, savePath);
       }
       await cachingFile.writeBytes(bytes);
-      await cachingFile.close();
-      CacheManager().setType(key, ext);
+      await cachingFile.close(type: ext);
       progress = DownloadProgress(
         bytes.length,
         bytes.length,
@@ -627,9 +622,9 @@ class ImageManager {
     await wait(cacheKey);
     loadingItems[cacheKey] = DownloadProgress(0, 1, cacheKey, "");
 
-    var cache = await CacheManager().findCache(cacheKey);
+    var cache = await CacheManager().readCache(cacheKey);
     if (cache != null) {
-      yield DownloadProgress(1, 1, cacheKey, cache);
+      yield DownloadProgress(1, 1, cacheKey, cache.path, cache.bytes, cache.type);
       loadingItems.remove(cacheKey);
       return;
     }
@@ -698,8 +693,7 @@ class ImageManager {
       }
 
       var ext = getExt(res);
-      CacheManager().setType(cacheKey, ext);
-      await caching.close();
+      await caching.close(type: ext);
       var length = result?.length ?? imageData.length;
       yield DownloadProgress(
         length,
@@ -742,9 +736,9 @@ class ImageManager {
     await wait(cacheKey);
     loadingItems[cacheKey] = DownloadProgress(0, 1, cacheKey, "");
 
-    var cache = await CacheManager().findCache(cacheKey);
+    var cache = await CacheManager().readCache(cacheKey);
     if (cache != null) {
-      yield DownloadProgress(1, 1, cacheKey, cache);
+      yield DownloadProgress(1, 1, cacheKey, cache.path, cache.bytes, cache.type);
       loadingItems.remove(cacheKey);
       return;
     }

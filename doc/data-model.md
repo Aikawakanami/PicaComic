@@ -39,7 +39,7 @@
 | `history.db → image_favorites` | 主键 `(id, ep, page)`；title、cover、other 等，`other` 是 JSON；与历史共用数据库 | `lib/foundation/image_favorites.dart → ImageFavoriteManager.init / add` |
 | `local_favorite.db` | 每个收藏夹直接作为一张表，主键 `(target, type)`；另有 `folder_order(folder_name PK, order_value)`、`folder_sync(folder_name PK, time, key, sync_data)` | `lib/foundation/local_favorites.dart → _checkAndCreate / createFolder` |
 | `cookies.db → cookies` | 主键 `(name, domain, path)`；value、expires、secure、httpOnly 等字段；普通 Cookie 单例与 JM 的短期内存 CookieJar 不同 | `lib/network/cookie_jar.dart → CookieJarSql.init`；`lib/network/jm_network/jm_network.dart → cookieJar` |
-| `cache.db → cache` | `key` 主键及 dir、name、expires、type；内容位于 `App.cachePath/cache/` 下，默认清理由 manager 控制 | `lib/foundation/cache_manager.dart → CacheManager._create / writeCache / checkCache` |
+| `cache.db → cache` | `key` 主键及 dir、name、expires、type，旧表缺 type 时补列，并建立 `cache_expires` 索引。内容位于 `App.cachePath/cache/` 下，容量按文件字节计量，设置键为 `settings[35]` | `lib/foundation/cache_manager.dart → CacheManager._ / _scanExistingFiles / _evictBatches` |
 | 下载目录下 `download.db → download` | `id` 主键，title、subtitle、time、directory、size、json；json 保存各源特有已下载模型 | `lib/network/download.dart → _DownloadDb._createTable / _addToDb` |
 | 下载目录下 `newDownload.json` | 队列与任务进度，包含 type、links、章节位置、图片位置、finishedTasks 等；每张图片完成可写入 | `lib/network/download.dart → _getInfo / _saveInfo`；`download_model.dart → toBaseMap / fromMap` |
 | 下载目录下漫画文件夹 | `cover.jpg`，有章节时使用从 1 开始的章节目录，图片文件 basename 从 0 开始 | `lib/network/download_model.dart → _addDownloading / getLinks`；`download.dart → getImage` |
