@@ -1,3 +1,5 @@
+import 'package:pica_comic/foundation/reading_metadata.dart';
+import 'package:pica_comic/foundation/reading_image_count.dart';
 import 'package:flutter_reorderable_grid_view/widgets/reorderable_builder.dart';
 import 'package:pica_comic/base.dart';
 import 'package:pica_comic/foundation/history.dart';
@@ -41,6 +43,7 @@ extension LocalFavoritesExt on FavoriteItem {
     if (type == FavoriteType.picacg) {
       var res = await PicacgNetwork().getComicInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       author = res.data.author;
       tags = res.data.tags;
@@ -48,11 +51,13 @@ extension LocalFavoritesExt on FavoriteItem {
     } else if (type == FavoriteType.ehentai) {
       var res = await EhNetwork().getGalleryInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       coverPath = res.data.cover;
     } else if (type == FavoriteType.jm) {
       var res = await JmNetwork().getComicInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       author = res.data.author.firstOrNull ?? '';
       tags = res.data.tags;
@@ -60,17 +65,20 @@ extension LocalFavoritesExt on FavoriteItem {
     } else if (type == FavoriteType.nhentai) {
       var res = await NhentaiNetwork().getComicInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       coverPath = res.data.cover;
     } else if (type == FavoriteType.htManga) {
       var res = await HtmangaNetwork().getComicInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       author = res.data.uploader;
       coverPath = res.data.cover;
     } else if (type == FavoriteType.hitomi) {
       var res = await HiNetwork().getComicInfo(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       author = res.data.subTitle;
       coverPath = res.data.cover;
@@ -78,6 +86,7 @@ extension LocalFavoritesExt on FavoriteItem {
       var comicSource = type.comicSource;
       var res = await comicSource.loadComicInfo!(target);
       if (res.error) return false;
+      recordReadingMetadata(type.sourceKey,target,res.data);
       name = res.data.title;
       author = res.data.subTitle ?? '';
       coverPath = res.data.cover;
@@ -353,6 +362,16 @@ class LocalFavoriteTile extends ComicTile {
   String get description => "${comic.time} | ${comic.type.name}";
 
   @override
+  Widget buildSubDescription(BuildContext context) {
+    final metrics = comic.metrics;
+    return Tooltip(message:'${"阅读次数".tl}: ${metrics.count}\n'
+        '${"阅读时长".tl}: ${metrics.durationLabel}\n${"图片数量".tl}: ${metrics.imageLabel.tl}',
+      child: Align(alignment:Alignment.centerLeft,child:FittedBox(fit:BoxFit.scaleDown,
+        child:Text('${"阅读".tl} ${metrics.count} · ${metrics.durationLabel} · ${metrics.imageLabel.tl} P',
+          maxLines:1,style:const TextStyle(fontSize:12)))));
+  }
+
+  @override
   bool get showFavorite => false;
 
   @override
@@ -535,7 +554,7 @@ class LocalFavoriteTile extends ComicTile {
         builder: (context) => Dialog(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
-                child: Column(
+                child: SingleChildScrollView(child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -546,6 +565,11 @@ class LocalFavoriteTile extends ComicTile {
                         style: const TextStyle(fontSize: 22),
                       ),
                     ),
+                    Padding(padding:const EdgeInsets.symmetric(horizontal:16,vertical:4),
+                      child:Text('${"最后阅读时间".tl}: ${comic.time}\n'
+                        '${"阅读次数".tl}: ${comic.metrics.count} · ${"阅读时长".tl}: ${comic.metrics.durationLabel}\n'
+                        '${"图片数量".tl}: ${comic.metrics.imageLabel.tl}',
+                        style:Theme.of(context).textTheme.bodySmall)),
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.article),
@@ -609,7 +633,7 @@ class LocalFavoriteTile extends ComicTile {
                       height: 16,
                     ),
                   ],
-                ),
+                )),
               ),
             ));
   }
@@ -671,6 +695,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage.ehentai(
@@ -688,6 +713,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage.jmComic(
@@ -706,6 +732,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage.hitomi(
@@ -724,6 +751,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage.htmanga(
@@ -742,6 +770,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage.nhentai(
@@ -760,6 +789,7 @@ class LocalFavoriteTile extends ComicTile {
           if (res.error) {
             showToast(message: res.errorMessage ?? "Error");
           } else {
+            recordReadingMetadata(comic.type.sourceKey,comic.target,res.data);
             var history = await History.findOrCreate(res.data);
             App.globalTo(
               () => ComicReadingPage(
@@ -843,6 +873,19 @@ class LocalFavoriteTile extends ComicTile {
 
   @override
   String get comicID => comic.target;
+
+  @override
+  String get historyComicID => historyTargetForFavorite(comic.type.key,comic.target);
+
+  @override
+  bool matchesReadingHistory(History history) =>
+      history.type.value == historyTypeForFavorite(comic.type.key);
+
+  @override
+  bool get showUnreadImageCount => true;
+
+  @override
+  String? get unreadImageCountLabel => comic.metrics.images == null ? null : comic.metrics.imageLabel;
 
   void editTags() {
     showDialog(

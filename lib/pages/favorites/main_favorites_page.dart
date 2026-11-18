@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:collection/collection.dart";
 import "package:flutter/material.dart";
@@ -8,6 +9,8 @@ import "package:pica_comic/comic_source/comic_source.dart";
 import 'package:pica_comic/components/components.dart';
 import "package:pica_comic/foundation/app.dart";
 import "package:pica_comic/foundation/local_favorites.dart";
+import "package:pica_comic/foundation/favorite_query.dart";
+import "package:pica_comic/foundation/reading_stats.dart";
 import "package:pica_comic/foundation/log.dart";
 import "package:pica_comic/network/download.dart";
 import "package:pica_comic/tools/translations.dart";
@@ -15,6 +18,7 @@ import "package:pica_comic/tools/translations.dart";
 import "../../network/net_fav_to_local.dart";
 import "../../tools/io_tools.dart";
 import "local_favorites.dart";
+import "favorite_view_controls.dart";
 import "local_search_page.dart";
 import "network_favorite_page.dart";
 
@@ -28,6 +32,8 @@ class FavoritesPageController extends StateController {
   FavoriteData? networkData;
 
   var selectedComics = <FavoriteItem>[];
+  List<FavoriteItem> visibleLocalComics = [];
+  bool localPaged = false;
 
   var openComicMenuFuncs = <FavoriteItem, Function>{};
 
@@ -189,24 +195,26 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
             const SizedBox(
               width: 8,
             ),
-            Text(
+            Expanded(child: Text(
               "已选择 @num 个项目".tlParams(
                   {"num": controller.selectedComics.length.toString()}),
               style: const TextStyle(fontSize: 16),
-            ).paddingBottom(3),
-            const Spacer(),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+            ).paddingBottom(3)),
             Tooltip(
-              message: "全选".tl,
+              message: controller.localPaged ? "全选当前页".tl : "全选".tl,
               child: IconButton(
                 icon: const Icon(Icons.select_all),
                 onPressed: () {
-                  controller.selectedComics = LocalFavoritesManager()
-                      .getAllComics(controller.current!)
-                      .toList();
+                  for(final comic in controller.visibleLocalComics) {
+                    if(!controller.selectedComics.contains(comic)) controller.selectedComics.add(comic);
+                  }
                   controller.update();
                 },
               ),
             ),
+            IconButton(tooltip:"查看已选".tl,icon:const Icon(Icons.checklist),
+              onPressed:()=>_reviewSelected(context)),
             Tooltip(
               message: "取消".tl,
               child: IconButton(
@@ -222,7 +230,8 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
               child: IconButton(
                 icon: const Icon(Icons.more_horiz),
                 onPressed: () {
-                  if (controller.selectedComics.length == 1) {
+                  if (controller.selectedComics.length == 1 &&
+                      controller.openComicMenuFuncs.containsKey(controller.selectedComics.single)) {
                     controller.openComicMenuFuncs[controller.selectedComics[0]]
                         ?.call();
                   } else {
@@ -289,6 +298,22 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
         ),
       ),
     );
+  }
+
+  void _reviewSelected(BuildContext context) {
+    showDialog(context:context,builder:(context) => StatefulBuilder(
+      builder:(context,setDialogState) => AlertDialog(
+        title:Text('${"查看已选".tl} (${controller.selectedComics.length})'),
+        content:SizedBox(width:400,height:360,child:ListView.builder(
+          itemCount:controller.selectedComics.length,itemBuilder:(context,index) {
+            final comic = controller.selectedComics[index];
+            return ListTile(title:Text(comic.name,maxLines:2,overflow:TextOverflow.ellipsis),
+              subtitle:Text(comic.type.name),trailing:IconButton(tooltip:'取消选择'.tl,
+                icon:const Icon(Icons.remove_circle_outline),onPressed:() {
+                  controller.selectedComics.remove(comic);
+                  controller.update(); setDialogState(() {});
+                }));
+          })),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:Text('关闭'.tl))])));
   }
 
   Widget buildFoldersList(BuildContext context, double height) {
@@ -478,9 +503,8 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
         key: Key(controller.current ?? ""),
       );
     } else {
-      var count = LocalFavoritesManager().count(controller.current!);
       return ComicsPageView(
-        key: Key(controller.current! + count.toString()),
+        key: Key(controller.current!),
         folder: controller.current!,
         selectedComics: controller.selectedComics,
         onClick: (key) {
@@ -524,8 +548,10 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
             child: Text("排序".tl),
             onTap: () {
               App.globalBack();
-              App.globalTo(() => LocalFavoritesFolder(folder))
-                  .then((value) => controller.update());
+              App.globalTo(() => LocalFavoritesFolder(folder)).then((value) {
+                StateController.findOrNull<SimpleController>(tag:'ComicsPageView $folder')?.refresh();
+                controller.update();
+              });
             },
           ),
           PopupMenuItem(
@@ -579,8 +605,10 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
       DesktopMenuEntry(
           text: "排序".tl,
           onClick: () {
-            App.globalTo(() => LocalFavoritesFolder(folder))
-                .then((value) => controller.update());
+            App.globalTo(() => LocalFavoritesFolder(folder)).then((value) {
+              StateController.findOrNull<SimpleController>(tag:'ComicsPageView $folder')?.refresh();
+              controller.update();
+            });
           }),
       DesktopMenuEntry(
           text: "重命名".tl,
@@ -698,6 +726,62 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
   }
 
   late List<FavoriteItem> comics;
+  late FavoriteSnapshot snapshot;
+  late FavoriteViewOptions options;
+  int page = 1;
+  int _statisticsRevision = -1;
+
+  void _readOptions() {
+    Map<String,dynamic> all = {};
+    try { all = Map<String,dynamic>.from(jsonDecode(appdata.settings[92])); } catch (_) {}
+    options = FavoriteViewOptions.fromJson(
+      all[folder] is Map ? Map<String,dynamic>.from(all[folder]) : {},
+      paged:appdata.settings[11] == '1',pageSize:normalizeFavoritePageSize(int.tryParse(appdata.settings[91])));
+  }
+
+  void _changeOptions(FavoriteViewOptions value) {
+    Map<String,dynamic> all = {};
+    try { all = Map<String,dynamic>.from(jsonDecode(appdata.settings[92])); } catch (_) {}
+    all[folder] = value.toJson();
+    appdata.settings[92] = jsonEncode(all);
+    appdata.updateSettings();
+    setState(() { options = value; page = 1; _loadSnapshot(); });
+    StateController.findOrNull<FavoritesPageController>()?.update();
+    _scrollTop();
+  }
+
+  void _loadSnapshot() {
+    snapshot = LocalFavoritesManager().folderSnapshot(folder,options.sort,options.descending);
+    page = page.clamp(1,snapshot.pageCount(options.pageSize));
+    final keys = snapshot.keys.toSet();
+    final before = widget.selectedComics.length;
+    widget.selectedComics.removeWhere((comic)=>!keys.contains((comic.type.key,comic.target)));
+    if(before != widget.selectedComics.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if(mounted) StateController.findOrNull<FavoritesPageController>()?.update();
+      });
+    }
+    _readPage();
+  }
+
+  void _readPage() {
+    comics = LocalFavoritesManager().folderItems(snapshot,
+      page:options.paged ? page : null,pageSize:options.pageSize);
+    final controller = StateController.findOrNull<FavoritesPageController>();
+    controller?.visibleLocalComics = comics;
+    controller?.localPaged = options.paged;
+    controller?.openComicMenuFuncs.clear();
+    _statisticsRevision = ReadingStatistics.instance.revision;
+  }
+
+  void _scrollTop() {
+    if(scrollController.hasClients) scrollController.jumpTo(0);
+  }
+
+  void _changePage(int value) {
+    setState(() { page = value.clamp(1,snapshot.pageCount(options.pageSize)); _readPage(); });
+    _scrollTop();
+  }
 
   @override
   void initState() {
@@ -717,8 +801,16 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
 
       location = current;
     });
-    comics = LocalFavoritesManager().getAllComics(folder);
+    _readOptions();
+    _loadSnapshot();
     super.initState();
+  }
+
+  @override
+  void didUpdateWidget(covariant ComicsPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if(LocalFavoritesManager().count(folder) != snapshot.keys.length) _loadSnapshot();
+    else if(_statisticsRevision != ReadingStatistics.instance.revision) _readPage();
   }
 
   @override
@@ -729,17 +821,23 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
 
   @override
   Widget build(BuildContext context) {
-    return buildFolderComics(folder);
+    return Column(children:[
+      FavoriteViewControls(options:options,onChanged:_changeOptions,onRefresh:rebuild),
+      Expanded(child:buildFolderComics(folder)),
+      if(options.paged) FavoritePager(page:page,pages:snapshot.pageCount(options.pageSize),
+        total:snapshot.keys.length,onChanged:_changePage),
+    ]);
   }
 
   void rebuild() {
     setState(() {
-      comics = LocalFavoritesManager().getAllComics(folder);
+      _loadSnapshot();
     });
   }
 
   Future<void> onRefresh(context) async {
-    return startFolderSync(context, folderSync()!);
+    await startFolderSync(context, folderSync()!);
+    if(mounted) rebuild();
   }
 
   Widget buildFolderComics(String folder) {
@@ -884,7 +982,7 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
 
   @override
   refresh() {
-    comics = LocalFavoritesManager().getAllComics(folder);
+    _loadSnapshot();
     update();
   }
 }

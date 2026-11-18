@@ -135,8 +135,22 @@ flutter test
 
 【已验证：用户反馈】用户在最新大图标与全不选版本安装后确认测试通过，并授权汇总提交到个人仓库 dev；该验收记录见[跨页选择变更](changes/2026-11-16-cross-page-selection.md#用户验收与仓库交付2026-11-16)。本机自动安装记录保留执行时的 user_pending 状态，其后的用户确认以本段和变更记录为准。
 
+## 阅读统计/收藏分页主机验证（2026-11-17）
+
+【已验证：执行证据】阅读统计与本地收藏分页排序的 34 项主机测试和 Android arm64 Debug 构建通过，未安装/启动真机；用户明确要求连接后另行通知更新。未使用个人数据或漫画源账户。详细范围与待验证项见[实施记录](changes/2026-11-17-reading-statistics-favorites.md)。
+
+Windows 运行临时 SQLite 测试时，将 PICA_TEST_SQLITE3 指向已有 SQLite DLL，再用已配置 E 盘 wrapper 执行 `flutter test --no-pub`；这是测试进程的动态库选择，不是应用依赖或全局环境安装。静态分析无 error，但保留未改文件的 22 条 warning 和既有 info。当前构建仍输出既有 NDK 版本建议/SDK XML 警告，构建成功；没有为此升级依赖或改业务/原生配置。
+
+2026-11-18 补充交付：按用户新授权调整页大小至 20/40/60/80/100，默认及旧 50 项归为 60；34 项主机回归和正常 APK 构建通过。先保存当前测试版 APK/完整私有数据，再核对包名并使用 ADB install -r 覆盖更新，启动请求成功、MainActivity 保持前台；收藏/历史数据库哈希未变。未运行设备集成测试，功能交互仍由用户验收，见[交付记录](changes/2026-11-17-reading-statistics-favorites.md#2026-11-18-页大小调整与真机交付)。
+
+同日收藏显示/排序修复：37 项主机回归、定向分析无 error/warning、正常 Android 构建与覆盖安装/启动检查通过；未运行设备集成测试，收藏/历史哈希与事前备份一致。验证细节见[增量修复](changes/2026-11-18-favorites-display-fixes.md)。
+
 ## 磁盘缓存回归与真机验收（2026-11-18）
 
 【已验证：执行证据】缓存回归入口为 `flutter test --no-pub test/cache_manager_test.dart`。Windows 测试进程可通过 `PICA_TEST_SQLITE3` 指向已有 SQLite DLL。测试使用临时缓存目录和 SQLite 库，通过测试接口降低容量，覆盖界面最小值以下的压力场景。
 
 【已验证：执行证据】Android 合成压力测试在独立包运行。真实 EH 验收使用正常入口的 Android 14 测试版，临时隔离该应用的磁盘缓存和索引，并恢复原设置、缓存和索引。各场景的验证结果见[缓存修复记录](changes/2026-11-18-disk-cache-capacity.md)。
+
+## 阅读统计与收藏合并交付回归（2026-11-18）
+
+【已验证：执行证据】在已包含磁盘缓存修复的 `dev` 基线上纳入阅读统计、收藏分页排序和显示修复，使用临时 SQLite 运行 `flutter test --no-pub --reporter expanded`，42 项通过。本轮验证在主机执行，真机交互验证范围见[实施记录](changes/2026-11-17-reading-statistics-favorites.md)和[显示修复](changes/2026-11-18-favorites-display-fixes.md)。

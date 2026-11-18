@@ -12,6 +12,14 @@ class _LocalFavoritesSettingsState extends State<LocalFavoritesSettings> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        SelectSettingWithAppdata(
+          icon:const Icon(Icons.view_carousel_outlined),
+          title:'默认浏览方式'.tl,options:['连续模式'.tl,'分页模式'.tl],settingsIndex:11),
+        ListTile(leading:const Icon(Icons.numbers),title:Text('默认每页数量'.tl),
+          subtitle:Text('各收藏夹可单独调整浏览和排序方式'.tl),
+          trailing:Select(values:favoritePageSizes.map((size)=>'$size').toList(),
+            initialValue:favoritePageSizes.indexOf(normalizeFavoritePageSize(int.tryParse(appdata.settings[91]))),
+            onChange:(i) { appdata.settings[91] = '${favoritePageSizes[i]}'; appdata.updateSettings(); })),
         ListTile(
           leading: const Icon(Icons.book),
           title: Text("快速收藏".tl),

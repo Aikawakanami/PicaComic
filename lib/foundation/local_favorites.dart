@@ -7,6 +7,8 @@ import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/image_manager.dart';
 import 'package:pica_comic/foundation/import_database.dart';
+import 'package:pica_comic/foundation/favorite_query.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/network/download.dart';
 import 'package:pica_comic/network/eh_network/eh_main_network.dart';
@@ -48,6 +50,12 @@ final class FavoriteType {
   static FavoriteType get htManga => const FavoriteType(4);
 
   static FavoriteType get nhentai => const FavoriteType(6);
+
+  String get sourceKey => switch(key) {
+    0 => 'picacg', 1 => 'ehentai', 2 => 'jm', 3 => 'hitomi',
+    4 => 'htmanga', 6 => 'nhentai',
+    _ => ComicSource.fromIntKey(key)?.key ?? 'unknown:$key',
+  };
 
   ComicType get comicType {
     if (key >= 0 && key <= 6) {
@@ -95,6 +103,11 @@ class FavoriteItem {
   String target;
   String coverPath;
   String time = getCurTime();
+  ReadingMetrics? _metrics;
+  ReadingMetrics get metrics => _metrics ??
+      ReadingStatistics.instance.metrics((type.sourceKey,target));
+  set metrics(ReadingMetrics value) => _metrics = value;
+  int? suppliedImageCount;
 
   bool get available {
     if (type.key <= 6 && type.key >= 0) {
@@ -138,7 +151,8 @@ class FavoriteItem {
         type = FavoriteType.picacg,
         tags = comic.tags,
         target = comic.id,
-        coverPath = comic.path;
+        coverPath = comic.path,
+        suppliedImageCount = comic.pages;
 
   FavoriteItem.fromEhentai(EhGalleryBrief comic)
       : name = comic.title,
@@ -146,7 +160,8 @@ class FavoriteItem {
         type = FavoriteType.ehentai,
         tags = comic.tags,
         target = comic.link,
-        coverPath = comic.coverPath;
+        coverPath = comic.coverPath,
+        suppliedImageCount = comic.pages;
 
   FavoriteItem.fromJmComic(JmComicBrief comic)
       : name = comic.name,
@@ -171,7 +186,8 @@ class FavoriteItem {
         type = FavoriteType.htManga,
         tags = [],
         target = comic.id,
-        coverPath = comic.image;
+        coverPath = comic.image,
+        suppliedImageCount = comic.pages;
 
   FavoriteItem.fromNhentai(NhentaiComicBrief comic)
       : name = comic.title,
@@ -196,7 +212,8 @@ class FavoriteItem {
         "tags": tags,
         "target": target,
         "coverPath": coverPath,
-        "time": time
+        "time": time,
+        if (suppliedImageCount != null) "imageCount": suppliedImageCount,
       };
 
   FavoriteItem.fromJson(Map<String, dynamic> json)
@@ -206,7 +223,8 @@ class FavoriteItem {
         tags = List<String>.from(json["tags"]),
         target = json["target"],
         coverPath = json["coverPath"],
-        time = json["time"];
+        time = json["time"],
+        suppliedImageCount = json['imageCount'] as int?;
 
   FavoriteItem.fromRow(Row row)
       : name = row["name"],
@@ -217,6 +235,11 @@ class FavoriteItem {
         coverPath = row["cover_path"],
         time = row["time"] {
     tags.remove("");
+    if (row.keys.contains('reading_count')) {
+      metrics = ReadingMetrics(count: row['reading_count'] ?? 0,
+        elapsedMs: row['reading_ms'] ?? 0, images: row['image_count'],
+        imagesComplete: row['images_complete'] == 1);
+    }
   }
 
   factory FavoriteItem.fromBaseComic(BaseComic comic) {
@@ -556,6 +579,17 @@ class LocalFavoritesManager {
     return rows.map((element) => FavoriteItem.fromRow(element)).toList();
   }
 
+  FavoriteQuery get _query => FavoriteQuery(_db, ReadingStatistics.instance,
+    historyPath:'${App.dataPath}/history.db',
+    sources: {for(final source in ComicSource.sources) source.intKey: source.key,
+      0:'picacg',1:'ehentai',2:'jm',3:'hitomi',4:'htmanga',6:'nhentai'});
+
+  FavoriteSnapshot folderSnapshot(String folder, FavoriteSort sort, bool descending) =>
+      _query.snapshot(folder,sort,descending);
+
+  List<FavoriteItem> folderItems(FavoriteSnapshot snapshot,{int? page,int pageSize=50}) =>
+      _query.read(snapshot,page:page,pageSize:pageSize).map(FavoriteItem.fromRow).toList();
+
   void addTagTo(String folder, String target, String tag) {
     _db.execute("""
       update "$folder"
@@ -653,6 +687,13 @@ class LocalFavoritesManager {
     _modifiedAfterLastCache = true;
     if (!folderNames.contains(folder)) {
       throw Exception("Folder does not exists");
+    }
+    if (comic.suppliedImageCount != null) {
+      try {
+        ReadingStatistics.instance.recordTotal((comic.type.sourceKey,comic.target),comic.suppliedImageCount!);
+      } catch(error,stack) {
+        LogManager.addLog(LogLevel.error,'Reading metadata','$error\n$stack');
+      }
     }
     if (comicExists(folder, comic.target, comic.type.key)) {
       return false;
@@ -834,10 +875,18 @@ class LocalFavoritesManager {
       where folder_name == ?
     """, [after, before]);
     }
+    try {
+      final views = Map<String,dynamic>.from(jsonDecode(appdata.settings[92]));
+      if(views.containsKey(before)) {
+        views[after] = views.remove(before);
+        appdata.settings[92] = jsonEncode(views);
+        appdata.updateSettings(false);
+      }
+    } catch (_) {}
     saveData();
   }
 
-  void onReadEnd(String target, FavoriteType type) async {
+  void onReadEnd(String target, FavoriteType type, {DateTime? at}) async {
     _modifiedAfterLastCache = true;
     bool isModified = false;
     for (final folder in folderNames) {
@@ -847,7 +896,7 @@ class LocalFavoritesManager {
       """, [target, type.key]);
       if (rows.isNotEmpty) {
         isModified = true;
-        var newTime = DateTime.now()
+        var newTime = (at ?? DateTime.now())
             .toIso8601String()
             .replaceFirst("T", " ")
             .substring(0, 19);
@@ -870,8 +919,8 @@ class LocalFavoritesManager {
             SET 
               $updateLocationSql
               time = '$newTime'
-            WHERE target == '${target.toParam}';
-          """);
+            WHERE target == ? AND type == ?;
+          """,[target,type.key]);
       }
     }
     if (isModified) {
@@ -890,6 +939,9 @@ class LocalFavoritesManager {
         .map((element) => FavoriteItem.fromRow(element).toJson())
         .toList();
     data["comics"] = comics;
+    data['reading_statistics'] = ReadingStatistics.instance.exportData({
+      for(final row in comics) (FavoriteType(row['type'] as int).sourceKey,row['target'] as String),
+    });
     return const JsonEncoder().convert(data);
   }
 
@@ -898,6 +950,11 @@ class LocalFavoritesManager {
       var data =
           const JsonDecoder().convert(dataString) as Map<String, dynamic>;
       final name_ = data["name"] as String;
+      final comics = (data['comics'] as List).map((json)=>
+        FavoriteItem.fromJson(Map<String,dynamic>.from(json))).toList();
+      if (data['reading_statistics'] != null) {
+        ReadingStatistics.instance.mergeData(Map<String,dynamic>.from(data['reading_statistics']));
+      }
       var name = name_;
       int i = 0;
       while (folderNames.contains(name)) {
@@ -905,8 +962,8 @@ class LocalFavoritesManager {
         i++;
       }
       createFolder(name);
-      for (var json in data["comics"]) {
-        addComic(name, FavoriteItem.fromJson(json));
+      for (var comic in comics) {
+        addComic(name, comic);
       }
       return (false, "");
     } catch (e, s) {

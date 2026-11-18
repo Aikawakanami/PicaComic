@@ -71,3 +71,9 @@
 - 链接／剪贴板：`lib/tools/app_links.dart → canHandle / handleAppLinks` 识别 EH／EX、NHentai、Hitomi host；`lib/main.dart → didChangeAppLifecycleState` 与 `MainPage` 受 `settings[61]` 控制剪贴板检查。JM／哔咔不在该 host 列表内。
 - 后台：`lib/tools/background_service.dart → onStart / runBackgroundService` 注册移动端哔咔签到；权限通知、系统调度与会话恢复尚未验证。
 - Git 依赖：`pubspec.yaml → photo_view / webdav_client / zip_flutter / flutter_qjs / desktop_webview_window / flutter_inappwebview / flutter_to_arch` 来自 Git 仓库，具体解析提交由 `pubspec.lock → resolved-ref` 记录。后续 Android 环境已按锁文件下载依赖并完成原生 Debug 构建，Git 依赖实现仍未逐项全面审阅。
+
+## 阅读统计备份扩展（2026-11-17）
+
+【已实现：静态依据】`lib/tools/io_tools.dart → _exportData` 在后台通过独立连接和 VACUUM INTO 导出 reading_stats.db 一致性快照，不依赖工作线程中的 App 静态路径。`_extractImport` 校验可选统计库版本/列及 quick_check，`_installImportFiles` 暂存为 reading_stats_temp.db，`ReadingStatistics.mergePending` 在后台单库事务合并，成功后才删暂存文件。旧包缺少统计库正常兼容；统计同会话按累计检查点 max 合并、不同会话汇总，不简单重复相加。文件夹 JSON 的 reading_statistics 只导出对应漫画身份。
+
+普通历史清理不删除统计，应用全部数据清理包含统计；无删除墓碑，旧备份会恢复旧会话。现有收藏/历史导入的固定列和冲突策略未统一改写，也不提供跨库/文件整包事务。统计核心快照/合并已用临时库验证，压缩包/WebDAV/文件夹全通道仍待真机测试；详情见[实施记录](changes/2026-11-17-reading-statistics-favorites.md)。

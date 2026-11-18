@@ -11,6 +11,9 @@
 | 搜索到阅读、安装源、下载恢复、收藏同步 | [业务流程](business-flows.md) | 四条代表性跨模块调用链 |
 | JS／Dart 契约、HTTP、Cookie、代理、WebDAV | [接口与集成](api-integrations.md) | 客户端契约与外部边界 |
 | 扩展漫画源 | [漫画源模块](modules/comic-sources.md) | 注册、解析、JS 桥接与修改入口 |
+| 连续加载失败不跳页与来源/ID去重（暂缓） | [待实施方案](changes/2026-11-17-continuous-loading-plan.md) | 失败暂停、按入口决定手动跳过、无新增保护与验收建议 |
+| 阅读次数/时长与本地收藏分页排序 | [需求与实施记录](changes/2026-11-17-reading-statistics-favorites.md) | 有效会话、章节累计、图片下限、全夹排序和本地分页；已更新真机并启动，交互待验收 |
+| 收藏未读图片数、旧页数排序与分页底部空白 | [显示修复](changes/2026-11-18-favorites-display-fixes.md) | 旧历史数量只读回退、取消排序恢复手动、去除重复安全区 |
 | 翻几十页后卡死及磁盘缓存上限 | [缓存容量修复](changes/2026-11-18-disk-cache-capacity.md) | 原因复现、按容量淘汰、合成压力与 EH 真机翻页／回翻 |
 | 远程源增删时分页/连续模式的表现 | [列表一致性](business-flows.md#远程列表变化与分页一致性) | 当前追加/缓存行为、页码示例与 EH 边界 |
 | 修改阅读、图片或下载 | [阅读与下载模块](modules/reader-download.md) | 生命周期、索引、缓存和队列 |
@@ -31,9 +34,9 @@
 | 启动与全局状态：`lib/main.dart`、`init.dart`、`base.dart`、`foundation/app.dart` | 已分析 | `main / init / App.init / Appdata.readData`，主路由、设置读取和异常边界 | [架构](architecture.md)、[数据](data-model.md) | Android 14 独立测试包首次启动通过，显示首次设置界面 | 启动故障注入、平台生命周期仍未验证 |
 | 漫画源注册与安装：`lib/comic_source/`、`assets/init.js`、`foundation/js_engine.dart` | 已分析 | `ComicSource.init / ComicSourceParser.parse / JsEngine._messageReceiver`；搜索、详情、章节主适配 | [漫画源](modules/comic-sources.md) | 静态；未运行 | 全部桥接方法、更新列表与重载并发留待后续 |
 | 浏览、搜索与详情：`lib/pages/`、`components/comics_list.dart` | 部分 | `MainPageState / SearchResultPage / ComicsPageLogic / ComicPage / JmComicPage`；新增 `ComicSelectionController / ComicSelectionRegion` | [流程](business-flows.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | 多选已在 Android 真机使用临时数据验证搜索、分类、排行、探索共用入口；详情及真实站点全流程未验证 | 分区/混合主页、Hitomi、专题页未纳入多选；其余详情及账户 UI 未深读 |
-| 阅读器：`lib/pages/reader/` | 部分 | `ReadingData / ComicReadingPageLogic / _updateHistory / loadInfo`；在线／离线主分支 | [阅读与下载](modules/reader-download.md) | Android 14 已验证 EH 在线阅读超出磁盘上限后前翻、回翻和重新加载 | 其他真实源、长时间运行、双页／连续阅读、锁屏、离线缺图与资源释放待验证 |
+| 阅读器：`lib/pages/reader/` | 部分 | `ReadingData / loadInfo / ReadingStatisticsBoundary / observeImage`；在线/离线主分支和阅读统计 | [阅读与下载](modules/reader-download.md) | Android 14 已验证 EH 在线阅读超出磁盘上限后前翻、回翻和重新加载；主机测试验证解码门槛、计时和生命周期/路由暂停；已覆盖更新真机并启动，功能交互待验收 | 其他真实源、长时间运行、双页／连续阅读、锁屏、离线缺图与资源释放待验证 |
 | 下载：`lib/network/download.dart`、`download_model.dart`、`custom_download_model.dart` | 已分析 | 队列、任务生命周期、序列化、错误恢复；代表任务 `JmDownloadingItem / CustomDownloadingItem` | [阅读与下载](modules/reader-download.md) | 静态；未运行 | 其他源任务、批量收藏下载、路径迁移和竞态未深读／实测 |
-| 历史与本地收藏存储：`lib/foundation/history.dart`、`local_favorites.dart`、`image_favorites.dart` | 已分析 | `init / createFolder / addComic / addComicsToFolder / saveReadHistory / tryUpdateDb`；Schema、身份与导入合并 | [数据](data-model.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | 批量写入/失败重试及独立大库导入、历史暂存恢复已在 Android 真机验证；见[导入恢复](changes/2026-11-16-data-import-recovery.md) | 全部编辑／搜索／排序 UI、早期 JSON 格式与整包中断 |
+| 历史与本地收藏存储：`lib/foundation/history.dart`、`local_favorites.dart`、`image_favorites.dart` | 已分析 | `init / onReadEnd / ReadingStatistics / FavoriteQuery / ComicsPageView`；统计身份、幂等合并、全夹排序/本地分页 | [数据](data-model.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | 批量写入/失败重试及独立大库导入、历史暂存恢复已在 Android 真机验证；见[导入恢复](changes/2026-11-16-data-import-recovery.md) | 早期 JSON、统计压缩包全通道/中断及其余编辑/搜索 UI 待验证 |
 | 网络收藏关联：`lib/network/net_fav_to_local.dart`、`lib/pages/favorites/network_to_local.dart` | 未分析 | 只定位文件；源通用 `FavoriteData` 契约另有阅读 | — | 未运行 | 持续关联、拉取页数、去重与中断恢复 |
 | 图片与缓存：`lib/foundation/image_manager.dart`、`cache_manager.dart`、`image_loader/` | 部分 | `getEhImageNew / CacheManager.readCache / _evictBatches / FileImageProvider`，及 JM／自定义图片入口 | [阅读与下载](modules/reader-download.md)、[缓存修复](changes/2026-11-18-disk-cache-capacity.md) | 主机和 Android 合成压力验证；Android 14 真实 EH 单页读到第 99 页，验证淘汰、回翻和重新下载 | 真实长列表、其他源与内存压力仍待验证 |
 | 网络与会话：`lib/network/app_dio.dart`、`http_client.dart`、`cookie_jar.dart`、`cloudflare.dart`、`http_proxy.dart` | 部分 | `logDio / AppHttpAdapter.fetch / CookieManagerSql / passCloudflare / getProxy` | [接口](api-integrations.md) | 静态；未发站点请求 | 代理转发全实现、TLS 与 Cookie 标准兼容性 |
@@ -43,7 +46,7 @@
 | 平台工具／更新：`lib/tools/`、`lib/network/update.dart` | 部分 | `handleAppLinks / onStart / getLatestVersion` 与调用者；仅主路径 | [接口](api-integrations.md) | 静态；未运行 | 后台凭据、PDF／图片导出、通知、平台通道 |
 | UI 基础设施：`lib/components/`、`lib/foundation/` | 部分 | `StateController / StateBuilder / App`，主导航与控制器消费者 | [架构](architecture.md) | 静态；未运行 | 控件交互、布局、控制器订阅清理与无障碍 |
 | 原生工程／打包：各平台目录、`windows/build_windows.py`、`debian/build.py` | 部分 | Android Gradle、Windows runner CMake、两个打包脚本的写入行为 | [开发](development.md) | Android Debug 构建、独立测试包安装及首次启动通过 | 原生通道各功能及其他平台运行、Web 兼容性未确认 |
-| CI／测试：`.github/workflows/`、`test/`、`integration_test/` | 已分析 | 全部工作流配置、原 `widget_test.dart → main` 空入口；新增多选状态/布局回归及多选/大库导入真机集成测试 | [开发](development.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | 缓存修复交付范围的 19 项主机回归通过（含 5 项缓存用例）；历史多选／导入真机集成未重跑；CI 未触发 | 其他业务回归仍不足，未查询 CI 历史 |
+| CI／测试：`.github/workflows/`、`test/`、`integration_test/` | 已分析 | 工作流配置；多选、阅读统计、收藏分页与排序、图片数和磁盘缓存的主机回归；多选与大库导入的真机集成 | [开发](development.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | `dev` 交付版本 42 项主机测试通过，包含 5 项缓存回归；真机集成保留历史验证记录 | 其他业务回归仍不足，未查询 CI 历史 |
 | 翻译与辅助资源：`utils/`、`lib/tools/translations.dart`、`assets/` | 部分 | 两个 utils `main` 的写入／下载副作用，资源清单和 JS API | [开发](development.md) | 静态；脚本未运行 | 翻译运行时、标签数据完整性；大型资源见排除项 |
 
 排除项：生成平台插件配置不做内部实现分析；`lib/components/scrollable_list/` 带 Fuchsia／BSD-style 版权声明，除阅读器消费入口外未深读其复制的滚动实现；字体、图标、图片、大型标签／翻译 JSON 不逐字分析。首轮对 Git／Pub 依赖只查清单与锁定引用；后续 Android 环境配置已下载锁定依赖并核对插件原生构建配置，仍未对第三方实现作完整分析。没有自动展开子模块或 LFS 内容。初始目录盘点确认 `lib/` 有 198 个已跟踪 Dart 文件，此数量不作为理解覆盖率。
@@ -60,8 +63,7 @@
 - 本轮完成：阶段 A 骨架、B 架构与存储、C 四条代表性流程、D 两个核心模块与开发准备；其余实现盲区保留在上表。已有上游说明未改，未创建或推断 Accepted ADR。
 - 环境进度（2026-11-16）：已按授权在 E 盘配置 Android 真机工具链，`flutter doctor -v` 全部通过；更换为 Android 14 的 PHZ110 后，独立 Debug 测试包已构建、安装并启动至首次设置界面，保留手机原版应用及数据。详情见[本机 Android 环境](development.md#本机-android-真机环境2026-11-16)。首轮分析记录中的“未安装／未运行”保留其历史时点含义。
 - 后续优先项：在已配置的 Android 环境核对[技术债 KB-03／KB-04](technical-debt.md) 的无章节源及在线／下载图片差异；随后按具体需求补全网络收藏关联、剩余源协议或目标平台。跨源身份改动另需明确迁移与兼容范围。
-- 当前继续入口：用户已确认最新多选测试版测试通过，并要求汇总全部功能与知识库到个人仓库 `dev`；本轮包含跨页选择、快速收藏、提示/开关/图标/全不选及导入恢复。验收范围见[跨页选择变更](changes/2026-11-16-cross-page-selection.md#用户验收与仓库交付2026-11-16)，其余技术债及全源/跨平台覆盖仍保留边界。
-- 最近实施：多选之后按用户反馈修复大库数据包导入，恢复测试版数据并完成正常界面导入及冷启动，见[导入恢复](changes/2026-11-16-data-import-recovery.md)；其他未验证范围仍以上表为准。
+- 当前继续入口（2026-11-18）：[阅读统计与收藏分页排序](changes/2026-11-17-reading-statistics-favorites.md)及[显示修复](changes/2026-11-18-favorites-display-fixes.md)交付至个人仓库 `dev`。此前已覆盖更新真机并确认启动，具体功能仍待验收。连续加载失败和去重只交付[方案文档](changes/2026-11-17-continuous-loading-plan.md)，实施暂缓。
 - 缓存修复（2026-11-18）：[原问题、原因与验证](changes/2026-11-18-disk-cache-capacity.md)记录旧清理死循环、容量回归和 EH 真机在线阅读结果。测试后已恢复真机的原设置与缓存。
 - 最近巡检：无；本轮为首轮分析。
 

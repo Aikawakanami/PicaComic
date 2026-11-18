@@ -32,6 +32,8 @@ import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/tools/keep_screen_on.dart';
 import 'package:pica_comic/foundation/image_manager.dart';
 import 'package:pica_comic/foundation/history.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
+import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/tools/save_image.dart';
 import 'package:pica_comic/tools/time.dart';
 import 'package:pica_comic/network/jm_network/jm_network.dart';
@@ -49,6 +51,7 @@ part 'eps_view.dart';
 part 'image_view.dart';
 
 part 'image.dart';
+part 'reading_statistics.dart';
 
 part 'touch_control.dart';
 
@@ -240,7 +243,11 @@ class ComicReadingPage extends StatelessWidget {
       ComicImage.clear();
       StateController.remove<ComicReadingPageLogic>();
       // 更新本地收藏
-      LocalFavoritesManager().onReadEnd(readingData.favoriteId, readingData.favoriteType);
+      logic.finishReadingSession();
+      if (logic.hasReadContent) {
+        LocalFavoritesManager().onReadEnd(readingData.favoriteId, readingData.favoriteType,
+          at:logic.statisticsSession?.lastReadAt);
+      }
       // 保存历史记录
       if (history != null) {
         _updateHistory(logic, true);
@@ -266,7 +273,7 @@ class ComicReadingPage extends StatelessWidget {
             StateController.findOrNull<WindowFrameController>()?.resetTheme());
       }
     }, builder: (logic) {
-      return DefaultTextStyle.merge(
+      return ReadingStatisticsBoundary(logic: logic, child: DefaultTextStyle.merge(
         style: TextStyle(
           color: useDarkBackground ? Colors.white : null,
           fontSize: 16,
@@ -366,7 +373,7 @@ class ComicReadingPage extends StatelessWidget {
             }
           }),
         ),
-      );
+      ));
     });
   }
 
@@ -468,11 +475,22 @@ class ComicReadingPage extends StatelessWidget {
 
   void loadInfo(ComicReadingPageLogic logic) async {
     logic.urls = [];
-    var res = await readingData.loadEp(logic.order);
+    logic.errorMessage = null;
+    final chapterOrder = logic.order;
+    var res = await readingData.loadEp(chapterOrder);
+    if (logic.order != chapterOrder) return;
     if (res.error) {
       logic.errorMessage = res.errorMessage;
     } else {
       logic.urls = res.data;
+      try {
+        ReadingStatistics.instance.recordChapter(readingData.statisticsIdentity,
+            readingData.statisticsChapter(chapterOrder),res.data.length,
+            catalog: readingData.statisticsCatalog);
+      } catch (error,stack) {
+        LogManager.addLog(LogLevel.error,'Reading statistics','$error\n$stack');
+      }
+
     }
     logic.isLoading = false;
     logic.update();

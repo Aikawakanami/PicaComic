@@ -59,3 +59,28 @@
 ## 尚未验证
 
 大库导入与暂存恢复的本轮实现及执行证据见[导入恢复变更](changes/2026-11-16-data-import-recovery.md)。其余跨源历史 ID 冲突、hashCode 长期兼容性、全部历史格式升级、并发导入与整包中断一致性仍属【推测／待核实】。
+
+## 阅读统计与收藏分页排序（2026-11-17）
+
+【已实现：静态依据】`lib/foundation/reading_stats.dart → ReadingStatistics` 使用独立 `reading_stats.db`（user_version=1），不把普通统计表加进按表枚举收藏夹的 local_favorite.db。模型如下：
+
+| 表 | 身份与数据 | 合并规则 |
+| --- | --- | --- |
+| reading_sessions | session_id 主键；source_key、comic_id、累计 elapsed_ms、counted、updated_at | 同一会话累计取 max；身份冲突回滚，不重复累加 |
+| comic_totals | `(source_key,comic_id)`；read_count、elapsed_ms | 从去重后的会话重新汇总，可重建 |
+| image_books | 同上；total_hint、chapter_ids、known_count、complete、updated_at | 目录/可信总数按记录时间合并，数量缓存重算 |
+| image_chapters | `(source_key,comic_id,chapter_id)`；pages、updated_at | 同章更新而非累加；按目录汇总 |
+
+`FavoriteType.sourceKey / ReadingData.statisticsIdentity` 统一统计身份：内置 htmanga 统一小写，NH 收藏类型为 6，不使用 HistoryType 的 5；Hitomi 使用收藏链接。自定义源仍需经过既有 intKey 映射，缺源/旧 hashCode 的长期兼容问题未因此解决。
+
+完整数量显示 `90`，已知下限显示 `30+`，完全无数量为“未获取”；下限按 30 参与排序，只有未知永远排末。首次发现目录保留可信整本总数；已知目录变化时使旧总数失效并重算。重复章节不会重复相加。Pc 接口以章序访问，因此使用 `@chapter:N`，源若插入/重排章节仍存在索引身份局限。
+
+`LocalFavoritesManager.onReadEnd` 按 `(target,type)` 更新各夹的 time，复用为最后阅读排序；由阅读器传入最后实际活动时间，未成功显示正文不覆盖。旧 time 保留，其中可能包含初始化时间，不能据此推断旧阅读次数；旧次数/时长从 0 开始。普通“清空历史”保留独立统计，`clearAppdata` 一并清空；重新导入旧统计备份可恢复此前数据，不是带删除标记的同步。
+
+`FavoriteQuery` 只读关联统计汇总，先对全夹排序，保留有序 `(type,target)` 快照，再取当前页元数据，不改 display_order。快照占用与收藏夹条数相关，不是远端快照。settings[11] 为默认连续/分页，settings[91] 默认 60（20/40/60/80/100），settings[92] 保存每夹模式/排序/方向/页大小；改名移动相应配置。
+
+整包导出使用 `VACUUM INTO` 快照纳入 reading_stats.db；导入复制为 reading_stats_temp.db，在后台单库事务合并，失败保留暂存库。收藏夹 JSON 含对应身份的 reading_statistics；缺少新字段的旧包仍可导入。普通备份包含所有会话，清除后再导入可恢复；不宣称跨库/文件整包原子性。源码为 `lib/tools/io_tools.dart / init.dart / local_favorites.dart`，验证范围见[实施记录](changes/2026-11-17-reading-statistics-favorites.md)。
+
+### 旧阅读图片数只读兼容（2026-11-18）
+
+`reading_image_count.dart / FavoriteQuery / ReadingStatistics.metrics` 将同来源旧 history.max_page 作为图片数量的回退；完整新总数优先，其他情况取已有下限最大值，Pc/JM/自定义源仍为 `N+`。统计查询与卡片/菜单统一口径，不把两个可能重叠的章节数相加。NH/Hitomi 按实际历史身份映射，不回写或伪造旧阅读会话。该回退依赖原历史库，文件夹 JSON 仍仅包含已有独立统计；详见[显示修复](changes/2026-11-18-favorites-display-fixes.md)。

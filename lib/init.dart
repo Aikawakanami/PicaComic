@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/cache_manager.dart';
 import 'package:pica_comic/foundation/history.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:pica_comic/foundation/js_engine.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/foundation/log.dart';
@@ -51,6 +52,11 @@ Future<void> init() async {
     LogManager.logFile = logFile;
     LogManager.addLog(LogLevel.info, "App Status", "Start initialization.");
     await appdata.readData();
+    try {
+      await ReadingStatistics.instance.mergePending();
+    } catch (e,s) {
+      LogManager.addLog(LogLevel.error,'ReadingStatistics.recover','$e\n$s');
+    }
     SingleInstanceCookieJar("${App.dataPath}/cookies.db");
     HttpProxyServer.createConfigFile();
     if (appdata.settings[58] == "1") {

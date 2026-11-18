@@ -11,6 +11,7 @@ import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/foundation/cache_manager.dart';
 import 'package:pica_comic/foundation/history.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:pica_comic/foundation/import_database.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/foundation/log.dart';
@@ -309,6 +310,17 @@ Future<String?> _exportData(String path, String appdataString,
     encode.addFile(
         localFavorite.name, localFavorite.path.replaceAll("\\", "/"));
     encode.addFile(history.name, history.path);
+    final statsDirectory = Directory(path).createTempSync('reading-stats-export-');
+    final statsSnapshot = File('${statsDirectory.path}/reading_stats.db');
+    final statistics = ReadingStatistics.open('$path/reading_stats.db');
+    try {
+      statistics.snapshotTo(statsSnapshot.path);
+      encode.addFile('reading_stats.db',statsSnapshot.path);
+    } finally {
+      statistics.close();
+      if (statsSnapshot.existsSync()) statsSnapshot.deleteSync();
+      statsDirectory.deleteSync();
+    }
     encode.addFile('cookies.db', "$path/cookies.db");
     await for (var entry in Directory("$path/comic_source").list()) {
       if (entry is File) {
@@ -448,6 +460,7 @@ Future<bool> importDataFromFile(String filePath,
     // Do not overwrite files left by an interrupted previous import.
     await LocalFavoritesManager().readData();
     await HistoryManager().tryUpdateDb();
+    await ReadingStatistics.instance.mergePending();
     final hasCookies = File('$stagePath/cookies.db').existsSync();
     final hasDownloads = Directory('$stagePath/download').existsSync();
     final hasSources = Directory('$stagePath/comic_source').existsSync();
@@ -475,6 +488,7 @@ Future<bool> importDataFromFile(String filePath,
     if (hasSources) await ComicSource.reload();
     await LocalFavoritesManager().readData();
     await HistoryManager().tryUpdateDb();
+    await ReadingStatistics.instance.mergePending();
     if (!await appdata.readDataFromJson(json)) return false;
     LocalFavoritesManager().updateUI();
     return true;
@@ -533,6 +547,9 @@ String _extractImport(String filePath, String staging) {
   if (File('$staging/history.db').existsSync()) {
     validateImportDatabase('$staging/history.db', favorites: false);
   }
+  if (File('$staging/reading_stats.db').existsSync()) {
+    validateReadingStatistics('$staging/reading_stats.db');
+  }
   // Older exports used the original download directory's name.
   for (final item in Directory(staging).listSync()) {
     if (item is Directory && item.name != 'comic_source' &&
@@ -553,6 +570,8 @@ Future<void> _installImportFiles(
   }
   final history = File('$staging/history.db');
   if (history.existsSync()) history.copySync('$path/history_temp.db');
+  final statistics = File('$staging/reading_stats.db');
+  if (statistics.existsSync()) statistics.copySync('$path/reading_stats_temp.db');
   final sources = Directory('$staging/comic_source');
   if (sources.existsSync()) {
     final current = Directory('$path/comic_source');

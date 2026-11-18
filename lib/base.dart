@@ -10,6 +10,8 @@ import 'package:pica_comic/tools/extensions.dart';
 import 'package:pica_comic/tools/io_tools.dart';
 import 'package:pica_comic/tools/notification.dart';
 import 'package:pica_comic/foundation/history.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
+import 'package:pica_comic/foundation/favorite_query.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'foundation/def.dart';
@@ -120,6 +122,8 @@ class Appdata {
     "0", //88 jm auto checkin
     "2.0.11", //89 jm app version
     "1", //90 显示多选收藏结果提示
+    "60", //91 本地收藏每页数量
+    "{}", //92 本地收藏各文件夹浏览与排序配置
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -187,6 +191,7 @@ class Appdata {
     for (int i = 0; i < st.length && i < settings.length; i++) {
       settings[i] = st[i];
     }
+    settings[91] = normalizeFavoritePageSize(int.tryParse(settings[91])).toString();
     if (settings[26].length < 2) {
       settings[26] += "0";
     }
@@ -256,6 +261,7 @@ class Appdata {
       for (var i = 0; i < settings.length && i < newSettings.length; i++) {
         settings[i] = newSettings[i];
       }
+      settings[91] = normalizeFavoritePageSize(int.tryParse(settings[91])).toString();
       settings[22] = downloadPath;
       settings[13] = authRequired;
       var newFirstUse = List<String>.from(json["firstUse"]);
@@ -298,6 +304,7 @@ Future<void> clearAppdata() async {
     await settingsFile.delete();
   }
   appdata.history.clearHistory();
+  ReadingStatistics.instance.clear();
   appdata = Appdata();
   await appdata.readData();
   await eraseCache();

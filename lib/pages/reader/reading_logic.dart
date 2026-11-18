@@ -103,7 +103,71 @@ class ComicReadingPageLogic extends StateController {
 
   ReadingData data;
 
-  bool isLoading = true;
+  bool _isLoading = true;
+  bool get isLoading => _isLoading;
+  set isLoading(bool value) {
+    _isLoading = value;
+    if (value) _resetDecodedImages();
+    _updateReadingActivity();
+  }
+
+  ReadingSessionTracker? statisticsSession;
+  bool hasReadContent = false;
+  bool _readingVisible = false;
+  final Set<int> _decodedPages = {};
+  final Map<int,(ImageStream,ImageStreamListener)> _imageWatches = {};
+  int _imageGeneration = 0;
+
+  void setReadingVisibility(bool visible) {
+    _readingVisible = visible;
+    _updateReadingActivity();
+  }
+
+  void _updateReadingActivity() {
+    final decoded = _decodedPages.contains(index) ||
+        (readingMethod.isTwoPage && _decodedPages.contains(index+1));
+    final active = _readingVisible && !isLoading && errorMessage == null &&
+        index >= 1 && index <= urls.length && decoded;
+    if (active) hasReadContent = true;
+    statisticsSession?.setActive(active);
+  }
+
+  void _resetDecodedImages() {
+    _imageGeneration++;
+    for (final watch in _imageWatches.values) { watch.$1.removeListener(watch.$2); }
+    _imageWatches.clear();
+    _decodedPages.clear();
+  }
+
+  /// Observe decoded display providers, not prefetch completion or URL counts.
+  void observeImage(int page,ImageProvider provider,BuildContext context) {
+    if (_decodedPages.contains(page) || _imageWatches.containsKey(page)) return;
+    final generation = _imageGeneration;
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    late ImageStreamListener listener;
+    listener = ImageStreamListener((info,synchronous) {
+      stream.removeListener(listener);
+      _imageWatches.remove(page);
+      info.dispose();
+      if (generation != _imageGeneration) return;
+      _decodedPages.add(page);
+      _updateReadingActivity();
+    },onError: (Object error,StackTrace? stack) {
+      stream.removeListener(listener);
+      _imageWatches.remove(page);
+      if (generation == _imageGeneration) {
+        _decodedPages.remove(page);
+        _updateReadingActivity();
+      }
+    });
+    _imageWatches[page] = (stream,listener);
+    stream.addListener(listener);
+  }
+
+  void finishReadingSession() {
+    statisticsSession?.close();
+    _resetDecodedImages();
+  }
 
   ///旋转方向: null-跟随系统, false-竖向, true-横向
   bool? rotation;
@@ -139,6 +203,7 @@ class ComicReadingPageLogic extends StateController {
   ///当前的页面, 0和最后一个为空白页, 用于进行章节跳转
   set index(int value) {
     _index = value;
+    _updateReadingActivity();
     for (var element in _indexChangeCallbacks) {
       element(value);
     }

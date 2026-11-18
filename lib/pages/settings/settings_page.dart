@@ -28,6 +28,7 @@ import '../../comic_source/comic_source.dart';
 import '../../foundation/app.dart';
 import '../../foundation/local_favorites.dart';
 import '../../foundation/log.dart';
+import '../../foundation/favorite_query.dart';
 import '../../network/cookie_jar.dart';
 import '../../network/download.dart';
 import '../../network/eh_network/eh_main_network.dart';

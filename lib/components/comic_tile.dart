@@ -41,6 +41,11 @@ abstract class ComicTile extends StatelessWidget {
   /// Comic ID, used to identify a comic.
   String? get comicID => null;
 
+  String? get historyComicID => comicID;
+  bool matchesReadingHistory(History history) => true;
+  bool get showUnreadImageCount => false;
+  String? get unreadImageCountLabel => null;
+
   bool get showFavorite => true;
 
   void showBlockPane() {
@@ -333,14 +338,17 @@ abstract class ComicTile extends StatelessWidget {
     var isFavorite = appdata.settings[72] == '1'
         ? LocalFavoritesManager().isExist(comicID!)
         : false;
-    var history = appdata.settings[73] == '1'
-        ? HistoryManager().findSync(comicID!)
+    var history = appdata.settings[73] == '1' && historyComicID != null
+        ? HistoryManager().findSync(historyComicID!)
         : null;
-    if (history?.page == 0) {
+    if(history != null && !matchesReadingHistory(history)) history = null;
+    if (history?.page == 0 && !showUnreadImageCount) {
       history!.page = 1;
     }
+    final hasProgress = history != null && (!showUnreadImageCount || history.page > 0);
+    final imageCount = showUnreadImageCount && !hasProgress ? unreadImageCountLabel : null;
 
-    if (!isFavorite && history == null) {
+    if (!isFavorite && !hasProgress && imageCount == null) {
       return child;
     }
 
@@ -371,17 +379,25 @@ abstract class ComicTile extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
-                if (history != null)
+                if (hasProgress)
                   Container(
                     height: 24,
                     color: Colors.blue.withOpacity(0.9),
                     constraints: const BoxConstraints(minWidth: 24),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: CustomPaint(
+                    child: Semantics(label:history.maxPage == null ? '${history.page}' : '${history.page}/${history.maxPage}',
+                      child:CustomPaint(
                       painter:
                           _ReadingHistoryPainter(history.page, history.maxPage),
-                    ),
-                  )
+                    )),
+                  ),
+                if(imageCount != null) Container(
+                  height:24,alignment:Alignment.center,
+                  color:Colors.blue.withValues(alpha:0.9),
+                  constraints:const BoxConstraints(minWidth:24),
+                  padding:const EdgeInsets.symmetric(horizontal:4),
+                  child:Text(imageCount,key:ValueKey('unread-image-count-$comicID'),
+                    style:const TextStyle(fontSize:12,color:Colors.white))),
               ],
             ),
           ),

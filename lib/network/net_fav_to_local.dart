@@ -129,7 +129,7 @@ void startConvert<T extends Object>(
   }
 }
 
-void startFolderSync<T extends Object>(
+Future<void> startFolderSync<T extends Object>(
     BuildContext context, FolderSync folderSync) async {
   final key = folderSync.key;
   final folderName = folderSync.folderName;

@@ -25,6 +25,14 @@ abstract class ReadingData {
 
   FavoriteType get favoriteType;
 
+  ReadingIdentity get statisticsIdentity => (favoriteType.sourceKey, favoriteId);
+
+  String statisticsChapter(int ep) => !hasEp ? '@single'
+      : eps?.keys.elementAtOrNull(ep - 1) ?? id;
+
+  Iterable<String> get statisticsCatalog => !hasEp ? const ['@single']
+      : (eps?.isNotEmpty ?? false) ? eps!.keys : [id];
+
   bool checkEpDownloaded(int ep) {
     return !hasEp || downloadedEps.contains(ep-1);
   }
@@ -74,6 +82,13 @@ abstract class ReadingData {
 }
 
 class PicacgReadingData extends ReadingData {
+  // This API addresses chapters by ordinal; chapter titles are not unique IDs.
+  @override
+  String statisticsChapter(int ep) => '@chapter:$ep';
+
+  @override
+  Iterable<String> get statisticsCatalog =>
+      List.generate(eps.length, (index) => statisticsChapter(index + 1));
   @override
   final String title;
 

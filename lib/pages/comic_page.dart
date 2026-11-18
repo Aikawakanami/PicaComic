@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pica_comic/base.dart';
+import 'package:pica_comic/foundation/reading_metadata.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/comment.dart';
 import 'package:pica_comic/components/components.dart';
@@ -599,8 +600,9 @@ class ComicPageLogic<T extends Object> extends StateController {
   int colorIndex = 0;
   bool? favoriteOnPlatform;
 
-  void get(Future<Res<T>> Function() loadData,
-      Future<bool> Function(T) loadFavorite, String Function() getId) async {
+  Future<void> get(Future<Res<T>> Function() loadData,
+      Future<bool> Function(T) loadFavorite, String Function() getId,
+      {String? sourceKey, String Function()? statisticsId}) async {
     var [res, _] = await Future.wait(
         [loadData(), Future.delayed(const Duration(milliseconds: 300))]);
     if (res.error) {
@@ -611,6 +613,7 @@ class ComicPageLogic<T extends Object> extends StateController {
       }
     } else {
       data = res.data;
+      if (sourceKey != null) recordReadingMetadata(sourceKey,statisticsId?.call() ?? getId(),res.data);
       favorite = await loadFavorite(res.data);
     }
     loading = false;
@@ -791,7 +794,8 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
             _logic.width = constraints.maxWidth;
             _logic.height = constraints.maxHeight;
             if (logic.loading) {
-              logic.get(loadData, loadFavorite, () => id);
+              logic.get(loadData, loadFavorite, () => id, sourceKey: sourceKey,
+                statisticsId:()=>toLocalFavoriteItem().target);
               return buildLoading(context);
             } else if (logic.message != null) {
               return NetworkError(

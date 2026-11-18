@@ -52,6 +52,7 @@ extension ImageExt on ComicReadingPage {
           precacheComicImage(logic, context, index + 1, target);
 
           ImageProvider image = createImageProvider(type, logic, index, target);
+          logic.observeImage(index + 1,image,context);
           return ComicImage(
             filterQuality: FilterQuality.medium,
             image: image,
@@ -79,6 +80,7 @@ extension ImageExt on ComicReadingPage {
           ImageProvider? imageProvider;
           if (index != 0 && index != logic.urls.length + 1) {
             imageProvider = createImageProvider(type, logic, index - 1, target);
+            logic.observeImage(index,imageProvider,context);
           } else {
             return PhotoViewGalleryPageOptions.customChild(
                 scaleStateController: PhotoViewScaleStateController(),
@@ -198,10 +200,11 @@ extension ImageExt on ComicReadingPage {
         return const SizedBox();
       }
 
+      final provider = createImageProvider(type,logic,imageIndex,target);
+      logic.observeImage(imageIndex + 1,provider,context);
       return ComicImage(
         key: ValueKey(imageIndex),
-        image: createImageProvider(
-            type, logic, imageIndex, target),
+        image: provider,
         fit: fit,
         alignment: alignment,
       );
