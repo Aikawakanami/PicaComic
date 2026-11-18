@@ -53,8 +53,10 @@ class EhGalleryPage extends BaseComicPage<Gallery> {
       };
 
   @override
-  String? get cover => (comicCover ?? data?.coverPath)
-      ?.replaceFirst("s.exhentai.org", "ehgt.org");
+  String? get entryCover => comicCover;
+
+  @override
+  String? get detailCover => data?.coverPath;
 
   @override
   EpsData? get eps => null;
@@ -325,6 +327,7 @@ class EhGalleryPage extends BaseComicPage<Gallery> {
     showDialog(
         context: App.globalContext!,
         builder: (dialogContext) => Dialog(
+              clipBehavior: Clip.antiAlias,
               child: StatefulBuilder(
                 builder: (context, setState) {
                   void load() async {
@@ -355,76 +358,79 @@ class EhGalleryPage extends BaseComicPage<Gallery> {
                     load();
                   }
 
-                  return Container(
+                  return SizedBox(
                     width: 350,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("下载".tl, style: const TextStyle(fontSize: 20))
-                            .paddingLeft(16),
-                        const Divider(),
-                        RadioListTile(
-                            value: 0,
-                            groupValue: current,
-                            onChanged: (value) =>
-                                setState(() => current = value as int),
-                            title: Text("普通下载".tl)),
-                        ExpansionTile(
-                          title: Text("归档下载".tl),
-                          shape: Border.all(color: Colors.transparent),
-                          children: [
-                            if (loading)
-                              const CircularProgressIndicator()
-                                  .paddingVertical(8)
-                                  .toCenter()
-                            else
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  RadioListTile(
-                                    value: 1,
-                                    groupValue: current,
-                                    onChanged: (value) =>
-                                        setState(() => current = value as int),
-                                    title: Text("Original".tl),
-                                    subtitle: Text(
-                                        "${info!.originCost} ${info!.originSize}"),
-                                  ),
-                                  RadioListTile(
-                                    value: 2,
-                                    groupValue: current,
-                                    onChanged: (value) =>
-                                        setState(() => current = value as int),
-                                    title: Text("Resample".tl),
-                                    subtitle: Text(
-                                        "${info!.resampleCost} ${info!.resampleSize}"),
-                                  ),
-                                  if (info!.cancelUnlockUrl != null)
-                                    ListTile(
-                                      leading: const Icon(Icons.lock_open),
-                                      title: Text("取消解锁".tl),
-                                      subtitle: Text("长按执行此操作".tl),
-                                      onLongPress: () {
-                                        setState(() {
-                                          cancelUnlock = true;
-                                          loading = true;
-                                        });
-                                      },
-                                    ).paddingLeft(6),
-                                ],
-                              )
-                          ],
-                        ),
-                        FilledButton(
-                          onPressed: () {
-                            startDownload(current);
-                            context.pop();
-                          },
-                          child: Text("确认".tl),
-                        ).toCenter()
-                      ],
+                    child: SingleChildScrollView(
+                      primary: false,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("下载".tl, style: const TextStyle(fontSize: 20))
+                              .paddingLeft(16),
+                          const Divider(),
+                          RadioListTile(
+                              value: 0,
+                              groupValue: current,
+                              onChanged: (value) =>
+                                  setState(() => current = value as int),
+                              title: Text("普通下载".tl)),
+                          ExpansionTile(
+                            title: Text("归档下载".tl),
+                            shape: Border.all(color: Colors.transparent),
+                            children: [
+                              if (loading)
+                                const CircularProgressIndicator()
+                                    .paddingVertical(8)
+                                    .toCenter()
+                              else
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    RadioListTile(
+                                      value: 1,
+                                      groupValue: current,
+                                      onChanged: (value) =>
+                                          setState(() => current = value as int),
+                                      title: Text("Original".tl),
+                                      subtitle: Text(
+                                          "${info!.originCost} ${info!.originSize}"),
+                                    ),
+                                    RadioListTile(
+                                      value: 2,
+                                      groupValue: current,
+                                      onChanged: (value) =>
+                                          setState(() => current = value as int),
+                                      title: Text("Resample".tl),
+                                      subtitle: Text(
+                                          "${info!.resampleCost} ${info!.resampleSize}"),
+                                    ),
+                                    if (info!.cancelUnlockUrl != null)
+                                      ListTile(
+                                        leading: const Icon(Icons.lock_open),
+                                        title: Text("取消解锁".tl),
+                                        subtitle: Text("长按执行此操作".tl),
+                                        onLongPress: () {
+                                          setState(() {
+                                            cancelUnlock = true;
+                                            loading = true;
+                                          });
+                                        },
+                                      ).paddingLeft(6),
+                                  ],
+                                )
+                            ],
+                          ),
+                          FilledButton(
+                            onPressed: () {
+                              startDownload(current);
+                              context.pop();
+                            },
+                            child: Text("确认".tl),
+                          ).toCenter()
+                        ],
+                      ),
                     ),
                   );
                 },

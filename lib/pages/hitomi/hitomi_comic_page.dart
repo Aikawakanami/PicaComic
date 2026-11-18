@@ -55,7 +55,12 @@ class HitomiComicPage extends BaseComicPage<HitomiComic> {
   }
 
   @override
-  String? get cover => data?.cover ?? comicCover;
+  String? get entryCover => comicCover;
+
+  @override
+  String? get detailCover => data?.cover;
+
+  String? get cover => detailCover ?? entryCover;
 
   @override
   void download() => _downloadComic(data!, context, cover!, link);

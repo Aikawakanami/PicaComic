@@ -50,6 +50,28 @@ class ImageManager {
 
   ImageManager._create();
 
+  static String comicCoverCacheKey(String url, String sourceKey) =>
+      _usesCustomCoverRequest(sourceKey) ? '$sourceKey$url' : url;
+
+  static bool _usesCustomCoverRequest(String sourceKey) => !const {
+        'picacg', 'ehentai', 'jm', 'hitomi', 'htmanga', 'nhentai',
+      }.contains(sourceKey);
+
+  Stream<DownloadProgress> getComicCover(String url, String sourceKey) {
+    if (_usesCustomCoverRequest(sourceKey)) {
+      return getCustomThumbnail(url, sourceKey);
+    }
+    return getImage(url, switch (sourceKey) {
+      'ehentai' => {
+          'Cookie': EhNetwork().cookiesStr,
+          'Referer': EhNetwork().ehBaseUrl,
+        },
+      'jm' => getImgHeaders(),
+      'hitomi' => {'Referer': 'https://hitomi.la/'},
+      _ => null,
+    });
+  }
+
   final dio = logDio(BaseOptions())
     ..interceptors.add(CookieManagerSql(SingleInstanceCookieJar.instance!));
 

@@ -14,6 +14,9 @@
 | 连续加载失败不跳页与来源/ID去重（暂缓） | [待实施方案](changes/2026-11-17-continuous-loading-plan.md) | 失败暂停、按入口决定手动跳过、无新增保护与验收建议 |
 | 阅读次数/时长与本地收藏分页排序 | [需求与实施记录](changes/2026-11-17-reading-statistics-favorites.md) | 有效会话、章节累计、图片下限、全夹排序和本地分页；已更新真机并启动，交互待验收 |
 | 收藏未读图片数、旧页数排序与分页底部空白 | [显示修复](changes/2026-11-18-favorites-display-fixes.md) | 旧历史数量只读回退、取消排序恢复手动、去除重复安全区 |
+| 导入后的旧收藏顺序与新收藏默认位置 | [收藏顺序恢复](changes/2026-11-19-favorite-order-recovery.md) | 原始导出比对、只校正旧项位置、新收藏默认放最前 |
+| 详情封面失效及本地收藏、历史封面更新 | [封面回退与修复](changes/2026-11-19-detail-cover-fallback.md) | 共用回退、感叹号占位、显示成功后回写封面 |
+| 长标题或小屏导致弹窗底部操作被截断 | [弹窗溢出修复](changes/2026-11-18-dialog-overflow.md) | 长按菜单、共用弹窗、下载详情与工具面板的滚动和回归 |
 | 翻几十页后卡死及磁盘缓存上限 | [缓存容量修复](changes/2026-11-18-disk-cache-capacity.md) | 原因复现、按容量淘汰、合成压力与 EH 真机翻页／回翻 |
 | 远程源增删时分页/连续模式的表现 | [列表一致性](business-flows.md#远程列表变化与分页一致性) | 当前追加/缓存行为、页码示例与 EH 边界 |
 | 修改阅读、图片或下载 | [阅读与下载模块](modules/reader-download.md) | 生命周期、索引、缓存和队列 |
@@ -38,7 +41,7 @@
 | 下载：`lib/network/download.dart`、`download_model.dart`、`custom_download_model.dart` | 已分析 | 队列、任务生命周期、序列化、错误恢复；代表任务 `JmDownloadingItem / CustomDownloadingItem` | [阅读与下载](modules/reader-download.md) | 静态；未运行 | 其他源任务、批量收藏下载、路径迁移和竞态未深读／实测 |
 | 历史与本地收藏存储：`lib/foundation/history.dart`、`local_favorites.dart`、`image_favorites.dart` | 已分析 | `init / onReadEnd / ReadingStatistics / FavoriteQuery / ComicsPageView`；统计身份、幂等合并、全夹排序/本地分页 | [数据](data-model.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | 批量写入/失败重试及独立大库导入、历史暂存恢复已在 Android 真机验证；见[导入恢复](changes/2026-11-16-data-import-recovery.md) | 早期 JSON、统计压缩包全通道/中断及其余编辑/搜索 UI 待验证 |
 | 网络收藏关联：`lib/network/net_fav_to_local.dart`、`lib/pages/favorites/network_to_local.dart` | 未分析 | 只定位文件；源通用 `FavoriteData` 契约另有阅读 | — | 未运行 | 持续关联、拉取页数、去重与中断恢复 |
-| 图片与缓存：`lib/foundation/image_manager.dart`、`cache_manager.dart`、`image_loader/` | 部分 | `getEhImageNew / CacheManager.readCache / _evictBatches / FileImageProvider`，及 JM／自定义图片入口 | [阅读与下载](modules/reader-download.md)、[缓存修复](changes/2026-11-18-disk-cache-capacity.md) | 主机和 Android 合成压力验证；Android 14 真实 EH 单页读到第 99 页，验证淘汰、回翻和重新下载 | 真实长列表、其他源与内存压力仍待验证 |
+| 图片与缓存：`lib/foundation/image_manager.dart`、`cache_manager.dart`、`image_loader/` | 部分 | `getEhImageNew / CacheManager.readCache / _evictBatches / FileImageProvider / ComicDetailCover`，及 JM／自定义图片入口 | [阅读与下载](modules/reader-download.md)、[缓存修复](changes/2026-11-18-disk-cache-capacity.md)、[封面回退](changes/2026-11-19-detail-cover-fallback.md) | Android 14 真实 EH 单页读到第 99 页，验证淘汰、回翻和重新下载；用户真机确认历史封面刷新和感叹号占位 | 真实长列表、其他源与内存压力仍待验证 |
 | 网络与会话：`lib/network/app_dio.dart`、`http_client.dart`、`cookie_jar.dart`、`cloudflare.dart`、`http_proxy.dart` | 部分 | `logDio / AppHttpAdapter.fetch / CookieManagerSql / passCloudflare / getProxy` | [接口](api-integrations.md) | 静态；未发站点请求 | 代理转发全实现、TLS 与 Cookie 标准兼容性 |
 | JM：`lib/comic_source/built_in/jm.dart`、`lib/network/jm_network/`、`lib/pages/jm/` | 部分 | `searchNew / getComicInfo / getChapter`，详情阅读与下载消费者 | [流程](business-flows.md)、[limit 实测](api-integrations.md#jm-搜索的-limit-参数实测2026-11-16) | 独立脚本已执行匿名搜索 limit 对照；详情、阅读、下载未实测 | 登录态、其他有效域名、评论、签到、全部收藏协议 |
 | 其他五源：`built_in/{picacg,ehentai,hitomi,ht_manga,nhentai}.dart`、`lib/network/` 对应目录 | 部分 | 六源注册与专用 builder、网络客户端入口、ReadingData 映射 | [接口定位表](api-integrations.md#内置源定位) | 静态；未运行 | 五源完整协议、账户与全部异常分支 |
@@ -46,7 +49,7 @@
 | 平台工具／更新：`lib/tools/`、`lib/network/update.dart` | 部分 | `handleAppLinks / onStart / getLatestVersion` 与调用者；仅主路径 | [接口](api-integrations.md) | 静态；未运行 | 后台凭据、PDF／图片导出、通知、平台通道 |
 | UI 基础设施：`lib/components/`、`lib/foundation/` | 部分 | `StateController / StateBuilder / App`，主导航与控制器消费者 | [架构](architecture.md) | 静态；未运行 | 控件交互、布局、控制器订阅清理与无障碍 |
 | 原生工程／打包：各平台目录、`windows/build_windows.py`、`debian/build.py` | 部分 | Android Gradle、Windows runner CMake、两个打包脚本的写入行为 | [开发](development.md) | Android Debug 构建、独立测试包安装及首次启动通过 | 原生通道各功能及其他平台运行、Web 兼容性未确认 |
-| CI／测试：`.github/workflows/`、`test/`、`integration_test/` | 已分析 | 工作流配置；多选、阅读统计、收藏分页与排序、图片数和磁盘缓存的主机回归；多选与大库导入的真机集成 | [开发](development.md)、[多选收藏](changes/2026-11-16-multi-select-favorites.md) | `dev` 交付版本 42 项主机测试通过，包含 5 项缓存回归；真机集成保留历史验证记录 | 其他业务回归仍不足，未查询 CI 历史 |
+| CI／测试：`.github/workflows/`、`test/`、`integration_test/` | 已分析 | 工作流配置；多选、阅读统计、收藏、封面、弹窗和磁盘缓存的主机回归；多选与大库导入的真机集成 | [开发](development.md)、[封面与弹窗](changes/2026-11-19-detail-cover-fallback.md#验证) | 57 项主机测试通过；新测试版已覆盖安装，真机集成保留历史验证记录 | 其他业务回归仍不足，未查询 CI 历史 |
 | 翻译与辅助资源：`utils/`、`lib/tools/translations.dart`、`assets/` | 部分 | 两个 utils `main` 的写入／下载副作用，资源清单和 JS API | [开发](development.md) | 静态；脚本未运行 | 翻译运行时、标签数据完整性；大型资源见排除项 |
 
 排除项：生成平台插件配置不做内部实现分析；`lib/components/scrollable_list/` 带 Fuchsia／BSD-style 版权声明，除阅读器消费入口外未深读其复制的滚动实现；字体、图标、图片、大型标签／翻译 JSON 不逐字分析。首轮对 Git／Pub 依赖只查清单与锁定引用；后续 Android 环境配置已下载锁定依赖并核对插件原生构建配置，仍未对第三方实现作完整分析。没有自动展开子模块或 LFS 内容。初始目录盘点确认 `lib/` 有 198 个已跟踪 Dart 文件，此数量不作为理解覆盖率。
@@ -65,6 +68,7 @@
 - 后续优先项：在已配置的 Android 环境核对[技术债 KB-03／KB-04](technical-debt.md) 的无章节源及在线／下载图片差异；随后按具体需求补全网络收藏关联、剩余源协议或目标平台。跨源身份改动另需明确迁移与兼容范围。
 - 当前继续入口（2026-11-18）：[阅读统计与收藏分页排序](changes/2026-11-17-reading-statistics-favorites.md)及[显示修复](changes/2026-11-18-favorites-display-fixes.md)交付至个人仓库 `dev`。此前已覆盖更新真机并确认启动，具体功能仍待验收。连续加载失败和去重只交付[方案文档](changes/2026-11-17-continuous-loading-plan.md)，实施暂缓。
 - 缓存修复（2026-11-18）：[原问题、原因与验证](changes/2026-11-18-disk-cache-capacity.md)记录旧清理死循环、容量回归和 EH 真机在线阅读结果。测试后已恢复真机的原设置与缓存。
+- 真机交付（2026-11-19）：[收藏顺序](changes/2026-11-19-favorite-order-recovery.md)、[封面与历史预览](changes/2026-11-19-detail-cover-fallback.md)及[弹窗溢出](changes/2026-11-18-dialog-overflow.md)一并交付至个人仓库 `dev`。用户确认收藏顺序、历史封面更新和感叹号占位正常。
 - 最近巡检：无；本轮为首轮分析。
 
 ## 协作仓库与分支

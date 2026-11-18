@@ -349,7 +349,7 @@ class LocalFavoriteTile extends ComicTile {
 
   final bool showFolderInfo;
 
-  static Map<String, File> cache = {};
+  static Map<(int, String, String), File> cache = {};
 
   @override
   String? get badge =>
@@ -376,14 +376,20 @@ class LocalFavoriteTile extends ComicTile {
 
   @override
   Widget get image => () {
+        final cacheKey = (comic.type.key, comic.target, comic.coverPath);
+        Widget placeholder(BuildContext context) => ColoredBox(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: const SizedBox.expand(),
+            );
         if (DownloadManager().isExists(comic.toDownloadId())) {
           return Image.file(
             DownloadManager().getCover(comic.toDownloadId()),
             fit: BoxFit.cover,
             height: double.infinity,
             filterQuality: FilterQuality.medium,
+            errorBuilder: (context, _, __) => placeholder(context),
           );
-        } else if (cache[comic.target] == null) {
+        } else if (cache[cacheKey] == null) {
           return FutureBuilder<File>(
             future: LocalFavoritesManager().getCover(comic),
             builder: (context, file) {
@@ -391,9 +397,7 @@ class LocalFavoriteTile extends ComicTile {
               if (file.hasError) {
                 LogManager.addLog(
                     LogLevel.error, "Network", file.stackTrace.toString());
-                child = const Center(
-                  child: Icon(Icons.error),
-                );
+                child = placeholder(context);
               } else if (file.data == null) {
                 child = ColoredBox(
                     color: Theme.of(context).colorScheme.secondaryContainer,
@@ -402,12 +406,13 @@ class LocalFavoriteTile extends ComicTile {
                       height: double.infinity,
                     ));
               } else {
-                cache[comic.target] = file.data!;
+                cache[cacheKey] = file.data!;
                 child = Image.file(
                   file.data!,
                   fit: BoxFit.cover,
                   height: double.infinity,
                   filterQuality: FilterQuality.medium,
+                  errorBuilder: (context, _, __) => placeholder(context),
                 );
               }
               return AnimatedSwitcher(
@@ -418,10 +423,11 @@ class LocalFavoriteTile extends ComicTile {
           );
         } else {
           return Image.file(
-            cache[comic.target]!,
+            cache[cacheKey]!,
             fit: BoxFit.cover,
             height: double.infinity,
             filterQuality: FilterQuality.medium,
+            errorBuilder: (context, _, __) => placeholder(context),
           );
         }
       }();

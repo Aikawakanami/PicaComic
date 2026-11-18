@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pica_comic/base.dart';
 import 'package:pica_comic/foundation/favorite_query.dart';
 import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -39,6 +40,10 @@ void main() {
     db.dispose();
     stats.close();
     directory.deleteSync(recursive: true);
+  });
+
+  test('new settings place added favorites at the front', () {
+    expect(Appdata().settings[53], '1');
   });
 
   test(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pica_comic/network/eh_network/eh_main_network.dart';
+import 'package:pica_comic/foundation/image_loader/stream_image_provider.dart';
 import 'package:pica_comic/network/jm_network/jm_image.dart';
 import 'package:pica_comic/network/picacg_network/models.dart';
 import 'package:pica_comic/pages/comic_page.dart';
@@ -18,7 +18,8 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  final comics = HistoryManager().getAll();
+  final _history = HistoryManager();
+  late final comics = _history.getAll();
   bool searchInit = false;
   bool searchMode = false;
   String keyword = "";
@@ -26,7 +27,22 @@ class _HistoryPageState extends State<HistoryPage> {
   bool isModified = false;
 
   @override
+  void initState() {
+    super.initState();
+    _history.coverChanges.addListener(_onCoverChanged);
+  }
+
+  void _onCoverChanged() {
+    final change = _history.coverChanges.value;
+    if (change == null) return;
+    final index = comics.indexWhere((comic) =>
+        comic.target == change.target && comic.type == change.type);
+    if (index >= 0) setState(() => comics[index].cover = change.url);
+  }
+
+  @override
   void dispose() {
+    _history.coverChanges.removeListener(_onCoverChanged);
     if (isModified) {
       appdata.history.saveData();
     }
@@ -179,15 +195,8 @@ class _HistoryPageState extends State<HistoryPage> {
           name: comic.title,
           subTitle_: comic.author,
           badgeName: comics_[i].type.name,
-          headers: {
-            if (comics_[i].type == HistoryType.ehentai)
-              "cookie": EhNetwork().cookiesStr,
-            if (comics_[i].type == HistoryType.ehentai ||
-                comics_[i].type == HistoryType.hitomi)
-              "User-Agent": webUA,
-            if (comics_[i].type == HistoryType.hitomi)
-              "Referer": "https://hitomi.la/"
-          },
+          coverImage: StreamImageProvider.comicCover(
+              comic.path, comics_[i].type.comicSource?.key),
           onTap: () {
             toComicPageWithHistory(context, comics_[i]);
           },

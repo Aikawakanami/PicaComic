@@ -23,6 +23,8 @@ class _Favorites extends Fake implements LocalFavoritesManager {
   @override
   List<String> get folderNames => ['fixture'];
   @override
+  int coverRevision = 0;
+  @override
   int count(String folder) =>
       query.db.select('SELECT COUNT(*) FROM fixture').first[0];
   @override
@@ -80,7 +82,7 @@ void main() {
         '2020-01-01 00:00:00',
         i
       ]);
-      LocalFavoriteTile.cache[id] = cover;
+      LocalFavoriteTile.cache[(2, id, cover.path)] = cover;
     }
     final historyPath = '${directory.path}/history.db';
     historyDb = sqlite3.open(historyPath);
@@ -193,6 +195,30 @@ void main() {
         find.byWidgetPredicate((widget) =>
             widget is Semantics && widget.properties.label == '1/233'),
         findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('cover update refreshes the current page without reordering',
+      (tester) async {
+    controller.selectedComics.clear();
+    await tester.pumpWidget(MaterialApp(
+        navigatorKey: App.navigatorKey, home: Scaffold(body: FavoritesPage())));
+    await tester.pumpAndSettle();
+    final before = controller.visibleLocalComics.map((c) => c.target).toList();
+    final comic = controller.visibleLocalComics.first;
+    final replacement = File(comic.coverPath)
+        .copySync('${directory.path}/replacement-cover.png');
+    LocalFavoriteTile.cache[(comic.type.key, comic.target, replacement.path)] =
+        replacement;
+    db.execute('UPDATE fixture SET cover_path = ? WHERE target = ? AND type = ?',
+        [replacement.path, comic.target, comic.type.key]);
+    (LocalFavoritesManager() as _Favorites).coverRevision++;
+    controller.update();
+    await tester.pumpAndSettle();
+    expect(controller.visibleLocalComics.first.coverPath, replacement.path);
+    expect(controller.visibleLocalComics.map((c) => c.target), before);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();

@@ -127,6 +127,7 @@ void showDialogMessage(BuildContext context, String title, String message) {
   showDialog(
       context: context,
       builder: (context) => AlertDialog(
+            scrollable: true,
             title: Text(title),
             content: Text(message),
             actions: [
@@ -141,6 +142,7 @@ void showConfirmDialog(BuildContext context, String title, String content,
   showDialog(
       context: context,
       builder: (context) => AlertDialog(
+            scrollable: true,
             title: Text(title),
             content: Text(content),
             actions: [
@@ -245,7 +247,7 @@ class ContentDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var content = Column(
+    final body = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Appbar(
@@ -254,14 +256,16 @@ class ContentDialog extends StatelessWidget {
         ),
         this.content,
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        OverflowBar(
+          alignment: MainAxisAlignment.end,
+          overflowAlignment: OverflowBarAlignment.end,
           children: actions,
         ).paddingRight(12),
         const SizedBox(height: 16),
       ],
     );
     return Dialog(
+      clipBehavior: Clip.antiAlias,
       insetPadding: context.width < 400
           ? const EdgeInsets.symmetric(horizontal: 4)
           : const EdgeInsets.symmetric(horizontal: 16),
@@ -275,7 +279,7 @@ class ContentDialog extends StatelessWidget {
             removeTop: true,
             removeBottom: true,
             context: context,
-            child: content,
+            child: SingleChildScrollView(primary: false, child: body),
           ),
         ),
       ),

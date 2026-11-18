@@ -84,7 +84,7 @@ class Appdata {
     "", //50 language, empty=system
     "", //51 默认收藏夹
     "1", //52 favorites
-    "0", //53 本地收藏添加位置(尾/首)
+    "1", //53 本地收藏添加位置(尾/首)
     "0", //54 阅读后移动本地收藏(否/尾/首)
     "1", //55 长按缩放
     "https://18comic.vip", //56 jm domain

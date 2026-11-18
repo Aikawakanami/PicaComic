@@ -730,6 +730,7 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
   late FavoriteViewOptions options;
   int page = 1;
   int _statisticsRevision = -1;
+  int _coverRevision = -1;
 
   void _readOptions() {
     Map<String,dynamic> all = {};
@@ -772,6 +773,7 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
     controller?.localPaged = options.paged;
     controller?.openComicMenuFuncs.clear();
     _statisticsRevision = ReadingStatistics.instance.revision;
+    _coverRevision = LocalFavoritesManager().coverRevision;
   }
 
   void _scrollTop() {
@@ -810,7 +812,10 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
   void didUpdateWidget(covariant ComicsPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if(LocalFavoritesManager().count(folder) != snapshot.keys.length) _loadSnapshot();
-    else if(_statisticsRevision != ReadingStatistics.instance.revision) _readPage();
+    else if (_statisticsRevision != ReadingStatistics.instance.revision ||
+        _coverRevision != LocalFavoritesManager().coverRevision) {
+      _readPage();
+    }
   }
 
   @override

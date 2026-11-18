@@ -132,6 +132,7 @@ class MainPageState extends State<MainPage> {
         context: App.globalContext!,
         builder: (dialogContext) {
           return AlertDialog(
+            scrollable: true,
             title: Text("有可用更新".tl),
             content: Text(info),
             actions: [

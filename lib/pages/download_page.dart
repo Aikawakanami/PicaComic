@@ -961,66 +961,74 @@ class _DownloadedComicInfoViewState extends State<DownloadedComicInfoView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
-            child: Text(
-              name,
-              style: const TextStyle(fontSize: 22),
-            ),
-          ),
           Expanded(
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 300,
-                childAspectRatio: 4,
-              ),
-              itemBuilder: (BuildContext context, int i) {
-                return Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: InkWell(
-                    borderRadius: const BorderRadius.all(Radius.circular(16)),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            const BorderRadius.all(Radius.circular(16)),
-                        color: downloadedEps.contains(i)
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 16,
-                          ),
-                          Expanded(
-                            child: Text(
-                              eps[i],
-                            ),
-                          ),
-                          const SizedBox(
-                            width: 4,
-                          ),
-                          if (downloadedEps.contains(i))
-                            const Icon(Icons.download_done),
-                          const SizedBox(
-                            width: 16,
-                          ),
-                        ],
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
+                    child: Center(
+                      child: Text(
+                        name,
+                        style: const TextStyle(fontSize: 22),
                       ),
                     ),
-                    onTap: () => readSpecifiedEps(i),
-                    onLongPress: () {
-                      deleteEpisode(i);
-                    },
-                    onSecondaryTapDown: (details) {
-                      deleteEpisode(i);
-                    },
                   ),
-                );
-              },
-              itemCount: eps.length,
+                ),
+                SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 300,
+                    childAspectRatio: 4,
+                  ),
+                  itemBuilder: (BuildContext context, int i) {
+                    return Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: InkWell(
+                        borderRadius: const BorderRadius.all(Radius.circular(16)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius:
+                                const BorderRadius.all(Radius.circular(16)),
+                            color: downloadedEps.contains(i)
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 16,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  eps[i],
+                                ),
+                              ),
+                              const SizedBox(
+                                width: 4,
+                              ),
+                              if (downloadedEps.contains(i))
+                                const Icon(Icons.download_done),
+                              const SizedBox(
+                                width: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                        onTap: () => readSpecifiedEps(i),
+                        onLongPress: () {
+                          deleteEpisode(i);
+                        },
+                        onSecondaryTapDown: (details) {
+                          deleteEpisode(i);
+                        },
+                      ),
+                    );
+                  },
+                  itemCount: eps.length,
+                ),
+              ],
             ),
           ),
           SizedBox(

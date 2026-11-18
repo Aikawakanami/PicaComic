@@ -75,8 +75,10 @@ abstract class ComicTile extends StatelessWidget {
           Widget child;
           if (!favorite) {
             child = Dialog(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(minWidth: 280, maxWidth: 400),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                primary: false,
                 child: Column(
                   key: const Key("1"),
                   mainAxisSize: MainAxisSize.min,
@@ -722,6 +724,7 @@ class NormalComicTile extends ComicTile {
       this.headers,
       this.tags,
       this.sourceKey,
+      this.coverImage,
       super.key});
 
   final String description_;
@@ -733,6 +736,7 @@ class NormalComicTile extends ComicTile {
   final String? badgeName;
   final Map<String, String>? headers;
   final String? sourceKey;
+  final ImageProvider? coverImage;
 
   @override
   final List<String>? tags;
@@ -748,7 +752,7 @@ class NormalComicTile extends ComicTile {
 
   @override
   Widget get image => AnimatedImage(
-        image: CachedImageProvider(
+        image: coverImage ?? CachedImageProvider(
           coverPath,
           headers: headers,
           sourceKey: sourceKey,
@@ -1061,19 +1065,24 @@ class _BlockingPaneState extends State<_BlockingPane> {
       ],
     );
 
+    final scrollableContent = SingleChildScrollView(
+      primary: false,
+      child: content,
+    );
     if (context.width > 400) {
       return Dialog(
         elevation: 0,
         backgroundColor: context.colorScheme.surface,
+        clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
-          child: content,
+          child: scrollableContent,
         ),
       );
     } else {
       return Dialog.fullscreen(
         backgroundColor: context.colorScheme.surface,
-        child: content,
+        child: scrollableContent,
       );
     }
   }

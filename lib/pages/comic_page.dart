@@ -7,6 +7,7 @@ import 'package:pica_comic/base.dart';
 import 'package:pica_comic/foundation/reading_metadata.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/comment.dart';
+import 'package:pica_comic/components/comic_detail_cover.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/components/select_download_eps.dart';
 import 'package:pica_comic/foundation/app.dart';
@@ -72,7 +73,10 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
   final String? comicCover;
 
   @override
-  String? get cover => comicCover ?? data?.cover;
+  String? get entryCover => comicCover;
+
+  @override
+  String? get detailCover => data?.cover;
 
   @override
   void download() async {
@@ -668,8 +672,9 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
   /// when not null, it will be display at the end of the title.
   int? get pages;
 
-  /// link to comic cover.
-  String? get cover;
+  String? get entryCover;
+
+  String? get detailCover;
 
   /// callback when user tap on a tag
   void tapOnTag(String tag, String key);
@@ -956,7 +961,7 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
                 const SizedBox(
                   width: 8,
                 ),
-                buildCover(context, logic, 136, 102),
+                buildCover(context, 136, 102, loading: logic.loading),
                 const SizedBox(
                   width: 12,
                 ),
@@ -1020,43 +1025,58 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
     return body;
   }
 
-  Widget buildCover(
-      BuildContext context, ComicPageLogic logic, double height, double width) {
-    if (cover == null) {
-      return Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-      );
-    }
-
-    if (headers["host"] == null && headers["Host"] == null) {
-      headers["host"] = Uri.parse(cover!).host;
-    }
-    ImageProvider image = StreamImageProvider(
-        () => ImageManager().getCustomThumbnail(cover!, sourceKey), cover!);
-    return GestureDetector(
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Hero(
-          tag: "image$tag",
-          child: Image(
-            image: image,
-            fit: BoxFit.cover,
-          ),
+  Widget buildCover(BuildContext context, double height, double width,
+      {required bool loading}) {
+    final entry = entryCover?.trim();
+    final detail = loading ? null : detailCover?.trim();
+    final entryUrl = entry == null || entry.isEmpty ? null : entry;
+    final detailUrl = detail == null || detail.isEmpty ? null : detail;
+    final heroTag = 'image$tag';
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: loading ? null : Hero(
+        tag: heroTag,
+        child: ComicDetailCover(
+          entryUrl: entryUrl,
+          detailUrl: detailUrl,
+          imageFor: (url) {
+            final saved = LocalFavoritesManager().cachedCover(url);
+            if (saved != null) return FileImage(saved);
+            return StreamImageProvider.comicCover(url, sourceKey);
+          },
+          onOpen: (url, image) => App.globalTo(() => ShowImagePageWithHero(
+                url, heroTag, image: image,
+                cacheKey: ImageManager.comicCoverCacheKey(url, sourceKey),
+              )),
+          onDetailCoverShown: (url) {
+            final model = data;
+            final history = _logic.history;
+            if (model is HistoryMixin && history != null &&
+                history.target == model.target && history.type == model.historyType) {
+              try {
+                HistoryManager().updateCover(history, url);
+              } catch (error) {
+                Log.warning('History',
+                    'Could not update the cover (${error.runtimeType})');
+              }
+            }
+            try {
+              final item = toLocalFavoriteItem();
+              LocalFavoritesManager().updateCover(item.target, item.type,
+                  oldUrl: entryUrl, newUrl: url);
+            } catch (error) {
+              Log.warning('Favorites',
+                  'Could not update the cover (${error.runtimeType})');
+            }
+          },
         ),
       ),
-      onTap: () =>
-          App.globalTo(() => ShowImagePageWithHero(cover!, "image$tag")),
     );
   }
 

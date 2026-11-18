@@ -33,11 +33,14 @@ class ShowImagePage extends StatelessWidget {
 }
 
 class ShowImagePageWithHero extends StatelessWidget {
-  const ShowImagePageWithHero(this.url, this.tag, {super.key});
+  const ShowImagePageWithHero(this.url, this.tag,
+      {super.key, this.image, this.cacheKey});
 
   final String url;
 
   final String tag;
+  final ImageProvider? image;
+  final String? cacheKey;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +53,10 @@ class ShowImagePageWithHero extends StatelessWidget {
             child: IconButton(
               icon: const Icon(Icons.download),
               onPressed: () async{
-                var file = await ImageManager().getFile(url);
+                final provider = image;
+                var file = provider is FileImage
+                    ? provider.file
+                    : await ImageManager().getFile(cacheKey ?? url);
                 if(file != null){
                   saveImage(file);
                 }
@@ -62,7 +68,7 @@ class ShowImagePageWithHero extends StatelessWidget {
         tag: tag,
         child: PhotoView(
           minScale: PhotoViewComputedScale.contained * 0.9,
-          imageProvider: CachedImageProvider(url),
+          imageProvider: image ?? CachedImageProvider(url),
           loadingBuilder: (context, event) {
             return Container(
               decoration: const BoxDecoration(color: Colors.black),

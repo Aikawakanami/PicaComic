@@ -22,10 +22,13 @@ import '../../network/jm_network/jm_network.dart';
 import 'jm_comments_page.dart';
 
 class JmComicPage extends BaseComicPage<JmComicInfo> {
-  const JmComicPage(this.id, {super.key});
+  const JmComicPage(this.id, {super.key, this.entryCover});
 
   @override
   final String id;
+
+  @override
+  final String? entryCover;
 
   @override
   ActionFunc? get onLike => () {
@@ -96,7 +99,7 @@ class JmComicPage extends BaseComicPage<JmComicInfo> {
       };
 
   @override
-  String get cover => getJmCoverUrl(id);
+  String get detailCover => getJmCoverUrl(id);
 
   @override
   void download() => downloadComic(data!, App.globalContext!);

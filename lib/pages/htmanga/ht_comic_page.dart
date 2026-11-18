@@ -43,7 +43,10 @@ class HtComicPage extends BaseComicPage<HtComicInfo> {
   }
 
   @override
-  String? get cover => data?.cover ?? comicCover;
+  String? get entryCover => comicCover;
+
+  @override
+  String? get detailCover => data?.cover;
 
   @override
   void download() {

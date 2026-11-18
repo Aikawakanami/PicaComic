@@ -13,7 +13,10 @@ import 'webview.dart';
 void openTool() {
   showModalBottomSheet(
     context: App.globalContext!,
-    builder: (context) => Column(
+    builder: (context) => ListView(
+      primary: false,
+      shrinkWrap: true,
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
       children: [
         ListTile(
           title: Text("工具".tl),

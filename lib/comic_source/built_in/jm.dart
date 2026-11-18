@@ -253,7 +253,7 @@ final jm = ComicSource.named(
     ],
   ),
   comicPageBuilder: (context, id, cover) {
-    return JmComicPage(id);
+    return JmComicPage(id, entryCover: cover);
   },
 );
 

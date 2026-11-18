@@ -458,7 +458,7 @@ class LocalFavoritesManager {
           createFolder(folder, true);
           var comics = allComics[folder]!;
           for (int i = 0; i < comics.length; i++) {
-            addComic(folder, comics[i]);
+            addComic(folder, comics[i], i);
           }
         }
       } catch (e, s) {
@@ -758,7 +758,7 @@ class LocalFavoritesManager {
     if (comic.coverPath.isEmpty) return;
     try {
       var file =
-          (await (ImageManager().getImage(comic.coverPath)).last).getFile();
+          (await ImageManager().getComicCover(comic.coverPath, comic.type.sourceKey).last).getFile();
       var path =
           "${(await getApplicationSupportDirectory()).path}${pathSep}favoritesCover";
       var directory = Directory(path);
@@ -773,12 +773,21 @@ class LocalFavoritesManager {
     }
   }
 
-  /// get comic cover
-  Future<File> getCover(FavoriteItem item) async {
+  File _coverFile(String url) {
     var path = "${App.dataPath}/favoritesCover";
     var hash =
-        md5.convert(const Utf8Encoder().convert(item.coverPath)).toString();
-    var file = File("$path/$hash.jpg");
+        md5.convert(const Utf8Encoder().convert(url)).toString();
+    return File("$path/$hash.jpg");
+  }
+
+  File? cachedCover(String url) {
+    final file = _coverFile(url);
+    return file.existsSync() ? file : null;
+  }
+
+  /// get comic cover
+  Future<File> getCover(FavoriteItem item) async {
+    final file = _coverFile(item.coverPath);
     if (file.existsSync()) {
       return file;
     }
@@ -790,15 +799,13 @@ class LocalFavoritesManager {
       return file;
     }
     try {
-      if (EhNetwork().cookiesStr == "") {
+      if (item.type == FavoriteType.ehentai && EhNetwork().cookiesStr == "") {
         await EhNetwork().getCookies(false);
       }
-      var res = await (ImageManager().getImage(item.coverPath, {
-        if (item.type == FavoriteType.ehentai) "cookie": EhNetwork().cookiesStr,
-        if (item.type == FavoriteType.hitomi) "Referer": "https://hitomi.la/"
-      }).last);
+      final res = await ImageManager()
+          .getComicCover(item.coverPath, item.type.sourceKey).last;
       file.createSync(recursive: true);
-      file.writeAsBytesSync(res.getFile().readAsBytesSync());
+      file.writeAsBytesSync(res.data ?? res.getFile().readAsBytesSync());
       return file;
     } catch (e) {
       await Future.delayed(const Duration(seconds: 5));
@@ -935,7 +942,8 @@ class LocalFavoritesManager {
     data["website"] = "https://github.com/Pacalini/PicaComic";
     data["name"] = folderName;
     var comics = _db
-        .select("select * from \"$folderName\";")
+        .select('SELECT * FROM ${sqlIdentifier(folderName)} '
+            'ORDER BY display_order, type, target')
         .map((element) => FavoriteItem.fromRow(element).toJson())
         .toList();
     data["comics"] = comics;
@@ -962,8 +970,8 @@ class LocalFavoritesManager {
         i++;
       }
       createFolder(name);
-      for (var comic in comics) {
-        addComic(name, comic);
+      for (var i = 0; i < comics.length; i++) {
+        addComic(name, comics[i], i);
       }
       return (false, "");
     } catch (e, s) {
@@ -1048,5 +1056,35 @@ class LocalFavoritesManager {
       set name = ?, author = ?, cover_path = ?, tags = ?
       where target == ? and type == ?;
     """, [comic.name, comic.author, comic.coverPath, comic.tags.join(","), comic.target, comic.type.key]);
+  }
+
+  int _coverRevision = 0;
+
+  int get coverRevision => _coverRevision;
+
+  /// Preserve a newer cover if another view updated it during the image load.
+  void updateCover(String target, FavoriteType type,
+      {required String? oldUrl, required String newUrl}) {
+    if (newUrl.isEmpty || newUrl == oldUrl) return;
+    var updated = 0;
+    _db.execute('BEGIN');
+    try {
+      for (final folder in folderNames) {
+        _db.execute('''UPDATE ${sqlIdentifier(folder)} SET cover_path = ?
+          WHERE target = ? AND type = ?
+          AND (NULLIF(TRIM(cover_path), '') IS NULL OR TRIM(cover_path) = ?)''',
+            [newUrl, target, type.key, oldUrl]);
+        updated += _db.getUpdatedRows();
+      }
+      _db.execute('COMMIT');
+    } catch (_) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+    if (updated != 0) {
+      _modifiedAfterLastCache = true;
+      _coverRevision++;
+      updateUI();
+    }
   }
 }

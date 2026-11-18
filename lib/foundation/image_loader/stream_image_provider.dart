@@ -13,6 +13,15 @@ class StreamImageProvider
   /// Image provider with [Stream<DownloadProgress>].
   const StreamImageProvider(this.streamBuilder, this.key);
 
+  factory StreamImageProvider.comicCover(String url, String? sourceKey) {
+    if (sourceKey == null) {
+      return StreamImageProvider(() => ImageManager().getImage(url), url);
+    }
+    return StreamImageProvider(
+        () => ImageManager().getComicCover(url, sourceKey),
+        ImageManager.comicCoverCacheKey(url, sourceKey));
+  }
+
   final Stream<DownloadProgress> Function() streamBuilder;
 
   @override

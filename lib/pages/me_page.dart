@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/foundation/history.dart';
-import 'package:pica_comic/foundation/image_loader/cached_image.dart';
+import 'package:pica_comic/foundation/image_loader/stream_image_provider.dart';
 import 'package:pica_comic/network/download.dart';
 import 'accounts_page.dart';
 import 'package:pica_comic/pages/download_page.dart';
@@ -29,7 +29,10 @@ class MePage extends StatelessWidget {
                 const SizedBox(
                   height: 12,
                 ),
-                buildHistory(context),
+                ValueListenableBuilder(
+                  valueListenable: HistoryManager().coverChanges,
+                  builder: (context, _, __) => buildHistory(context),
+                ),
                 if (shouldShowTwoPanel)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,9 +137,9 @@ class MePage extends StatelessWidget {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: AnimatedImage(
-                          image: CachedImageProvider(
+                          image: StreamImageProvider.comicCover(
                             history[index].cover,
-                            sourceKey: history[index].type.comicSource?.key,
+                            history[index].type.comicSource?.key,
                           ),
                           width: 96,
                           height: 128,

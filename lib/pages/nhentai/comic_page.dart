@@ -101,7 +101,10 @@ class NhentaiComicPage extends BaseComicPage<NhentaiComic> {
       };
 
   @override
-  String? get cover => comicCover ?? data?.cover;
+  String? get entryCover => comicCover;
+
+  @override
+  String? get detailCover => data?.cover;
 
   @override
   void download() {

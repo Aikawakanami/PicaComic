@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/log.dart';
@@ -181,10 +182,19 @@ class HistoryManager {
 
   HistoryManager.create();
 
+  @visibleForTesting
+  HistoryManager.forTesting(this._db);
+
   factory HistoryManager() =>
       cache == null ? (cache = HistoryManager.create()) : cache!;
 
   late Database _db;
+
+  final _coverChanges =
+      ValueNotifier<({String target, HistoryType type, String url})?>(null);
+
+  ValueListenable<({String target, HistoryType type, String url})?>
+      get coverChanges => _coverChanges;
 
   int get length => _db.select("select count(*) from history;").first[0] as int;
 
@@ -322,6 +332,17 @@ class HistoryManager {
         StateController.findOrNull(tag: "me_page")?.update();
       });
     }
+  }
+
+  /// Only replace the stored cover observed by the detail page.
+  void updateCover(History history, String url) {
+    if (url.isEmpty || history.cover == url) return;
+    _db.execute('''UPDATE history SET cover = ?
+      WHERE target = ? AND type = ? AND cover IS ?''',
+        [url, history.target, history.type.value, history.cover]);
+    if (_db.getUpdatedRows() == 0) return;
+    history.cover = url;
+    _coverChanges.value = (target: history.target, type: history.type, url: url);
   }
 
   void clearHistory() {
