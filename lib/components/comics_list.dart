@@ -6,9 +6,21 @@ class ComicsPageLogic<T> extends StateController {
   final selection = ComicSelectionController();
   int _generation = 0;
   bool? _paged;
+  int _sourcePagesPerPage = 1;
+  int? _maxSourcePage;
+  final _sourcePages = <int, List<T>>{};
+  final _completedGroups = <int>{};
+  final _groupErrors = <int, String>{};
 
-  void updateMode(bool paged) {
+  bool get groupsSourcePages => _sourcePagesPerPage > 1;
+
+  void updateMode(bool paged, {int sourcePagesPerPage = 1}) {
     if (_paged != null && _paged != paged) selection.exit(notify: false);
+    final count = paged ? sourcePagesPerPage : 1;
+    if (_sourcePagesPerPage != count) {
+      _sourcePagesPerPage = count;
+      _resetPages();
+    }
     _paged = paged;
   }
 
@@ -34,6 +46,10 @@ class ComicsPageLogic<T> extends StateController {
 
   void get(Future<Res<List<T>>> Function(int) getComics) async {
     if (loadingData) return;
+    if (groupsSourcePages) {
+      await _loadGroup(getComics);
+      return;
+    }
     loadingData = true;
     final generation = _generation;
     Future.microtask(() => update());
@@ -72,20 +88,86 @@ class ComicsPageLogic<T> extends StateController {
     }
   }
 
+  Future<void> _loadGroup(Future<Res<List<T>>> Function(int) getComics) async {
+    loadingData = true;
+    final generation = _generation;
+    final requestedPage = current;
+    final count = _sourcePagesPerPage;
+    final first = (requestedPage - 1) * count + 1;
+    final items = <T>[];
+    String? error;
+    await Future<void>.value();
+    if (generation != _generation) return;
+
+    for (var sourcePage = first; sourcePage < first + count; sourcePage++) {
+      if (_maxSourcePage != null && sourcePage > _maxSourcePage!) break;
+      var sourceItems = _sourcePages[sourcePage];
+      if (sourceItems == null) {
+        try {
+          final response = await getComics(sourcePage);
+          if (generation != _generation) return;
+          if (response.error) {
+            error = response.errorMessageWithoutNull;
+            break;
+          }
+          final total = response.subData;
+          if (total is int && total >= 0) {
+            _maxSourcePage = total;
+            maxPage = math.max(1, (total + count - 1) ~/ count);
+            if (sourcePage > total) break;
+          }
+          sourceItems = response.data;
+          _sourcePages[sourcePage] = sourceItems;
+        } catch (exception) {
+          if (generation != _generation) return;
+          error = exception.toString();
+          break;
+        }
+      }
+      items.addAll(sourceItems);
+      final previousLength = dividedComics?[requestedPage]?.length ?? 0;
+      if (items.length > previousLength && current == requestedPage) {
+        (dividedComics ??= {})[requestedPage] = List<T>.of(items);
+        update();
+      }
+    }
+
+    (dividedComics ??= {})[requestedPage] = items;
+    if (error == null) {
+      _completedGroups.add(requestedPage);
+    } else {
+      _groupErrors[requestedPage] = error;
+    }
+    loadingData = false;
+    if (maxPage != null && current > maxPage!) current = maxPage!;
+    _readGroupState();
+    update();
+  }
+
+  void _readGroupState() {
+    message = _groupErrors[current];
+    loading = message == null && !_completedGroups.contains(current);
+  }
+
   void changePage(int page) {
     if (selection.busy || page < 1 || page == current ||
         (maxPage != null && page > maxPage!)) {
       return;
     }
     current = page;
-    message = null;
-    loading = dividedComics?[page] == null;
+    if (groupsSourcePages) {
+      _readGroupState();
+    } else {
+      message = null;
+      loading = dividedComics?[page] == null;
+    }
     update();
   }
 
   /// Retry the current request without discarding cross-page selections/cache.
   void retry() {
     if (selection.busy || loadingData) return;
+    _groupErrors.remove(current);
     message = null;
     loading = true;
     update();
@@ -132,6 +214,11 @@ class ComicsPageLogic<T> extends StateController {
   void refresh() {
     if (selection.busy) return;
     selection.exit();
+    _resetPages();
+    update();
+  }
+
+  void _resetPages() {
     _generation++;
     loadingData = false;
     current = 1;
@@ -139,8 +226,12 @@ class ComicsPageLogic<T> extends StateController {
     _emptyPageCount = 0;
     loading = true;
     comics = null;
+    dividedComics = null;
     message = null;
-    update();
+    _maxSourcePage = null;
+    _sourcePages.clear();
+    _completedGroups.clear();
+    _groupErrors.clear();
   }
 }
 
@@ -217,15 +308,20 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
         init: ComicsPageLogic<T>(),
         tag: tag,
         builder: (logic) {
-          logic.updateMode(appdata.settings[25] != '0');
+          final paged = appdata.settings[25] != '0';
+          logic.updateMode(paged,
+              sourcePagesPerPage: appdata.appSettings.browseSourcePagesPerPage);
           Widget buildList() {
-            if (logic.dividedComics?[logic.current] == null &&
+            if (!logic.groupsSourcePages &&
+                logic.dividedComics?[logic.current] == null &&
                 logic.message == null &&
-                appdata.settings[25] != "0") {
+                paged) {
               logic.loading = true;
             }
-            if (logic.loading) {
-              logic.get(getComics);
+            final hasPartialGroup = logic.groupsSourcePages &&
+                (logic.dividedComics?[logic.current]?.isNotEmpty ?? false);
+            if (logic.loading) logic.get(getComics);
+            if (logic.loading && !hasPartialGroup) {
               return Column(
                 children: [
                   if (title != null) const Appbar(title: Text("")),
@@ -237,11 +333,13 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                   )
                 ],
               );
-            } else if (logic.message != null) {
+            } else if (logic.message != null && !hasPartialGroup) {
               return Column(
                 children: [
                   removeSliver(header) ?? const SizedBox(),
-                  if (appdata.settings[25] != '0' && logic.comics != null &&
+                  if (paged &&
+                      (logic.comics != null ||
+                          (logic.groupsSourcePages && logic.current > 1)) &&
                       showPageIndicator)
                     SizedBox(
                       width: double.infinity,
@@ -256,7 +354,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                 ],
               );
             } else {
-              if (appdata.settings[25] == "0") {
+              if (!paged) {
                 List<T> comics = [];
                 if (appdata.appSettings.fullyHideBlockedWorks) {
                   for (var comic in logic.comics!) {
@@ -315,6 +413,8 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                   ],
                 );
               } else {
+                final groupStatus =
+                    hasPartialGroup ? _buildGroupStatus(logic) : null;
                 List<T> comics = [];
                 if (appdata.appSettings.fullyHideBlockedWorks) {
                   for (var comic in logic.dividedComics![logic.current]!) {
@@ -337,6 +437,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                       if (showPageIndicator &&
                           (logic.maxPage != 1 || logic.current > 1))
                         buildPageSelector(context, logic),
+                      if (groupStatus != null) groupStatus,
                       SliverFillRemaining(
                         hasScrollBody: false,
                         child: buildEmptyView(context),
@@ -356,6 +457,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                         appdata.settings[64] == "0" &&
                         (logic.maxPage != 1 || logic.current > 1))
                       buildPageSelector(context, logic),
+                    if (groupStatus != null) groupStatus,
                     SliverGrid(
                       delegate: SliverChildBuilderDelegate(
                           childCount: comics.length, (context, i) {
@@ -419,7 +521,6 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
 
           final list = buildList();
           if (!_multiSelectEnabled) return list;
-          final paged = appdata.settings[25] != '0';
           final items =
               paged ? (logic.dividedComics?[logic.current]) : logic.comics;
           final available = <FavoriteItem>[];
@@ -460,6 +561,24 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
         child: body,
       );
     }
+  }
+
+  Widget? _buildGroupStatus(ComicsPageLogic<T> logic) {
+    if (logic.loading) {
+      return const SliverToBoxAdapter(child: LinearProgressIndicator());
+    }
+    final message = logic.message;
+    if (message == null) return null;
+    return SliverToBoxAdapter(
+      child: ListTile(
+        title: Text("源页加载失败".tl),
+        subtitle: Text(message),
+        trailing: TextButton(
+          onPressed: logic.retry,
+          child: Text("重试".tl),
+        ),
+      ),
+    );
   }
 
   Widget buildPageSelector(BuildContext context, ComicsPageLogic logic) {

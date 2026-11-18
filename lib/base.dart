@@ -124,6 +124,7 @@ class Appdata {
     "1", //90 显示多选收藏结果提示
     "60", //91 本地收藏每页数量
     "{}", //92 本地收藏各文件夹浏览与排序配置
+    "1", //93 每个应用页合并的源页数，仅用于远程分页
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -347,6 +348,16 @@ class _Settings {
 
   set comicsListDisplayType(int value) {
     appdata.settings[25] = value.toString();
+  }
+
+  int get browseSourcePagesPerPage => switch (_settings[93]) {
+        '2' => 2,
+        '3' => 3,
+        _ => 1,
+      };
+
+  set browseSourcePagesPerPage(int value) {
+    _settings[93] = value.toString();
   }
 
   /// build-in comic sources

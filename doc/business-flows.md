@@ -25,7 +25,7 @@
 
 ### 远程列表变化与分页一致性
 
-【已实现：静态依据】通用列表没有为整次浏览固定远端数据快照。`lib/components/comics_list.dart → ComicsPageLogic.loadNextPage` 请求下一逻辑页后直接 `comics.addAll(res.data)`，未做列表身份去重，也不回头核对已加载条目。分页模式在 `dividedComics` 缓存已访问页；`ComicsPage.build` 仅在当前页缓存不存在时调用 `get`。`refresh` 后首次成功读取会重建页缓存。
+【已实现：静态依据】通用列表没有为整次浏览固定远端数据快照。`lib/components/comics_list.dart → ComicsPageLogic.loadNextPage` 请求下一逻辑页后直接 `comics.addAll(res.data)`，未做列表身份去重，也不回头核对已加载条目。分页模式在 `dividedComics` 缓存已访问的应用页，合并 2／3 个源页时还在 `_sourcePages` 缓存每个成功的源页。分组失败后重试复用本组缓存，显式刷新清除缓存。详见[源页合并](changes/2026-11-19-source-page-grouping.md)。
 
 | 模式 | 当前客户端行为 | 远端变化时的条件性影响 |
 | --- | --- | --- |
@@ -34,7 +34,7 @@
 
 【推演／待核实】假设源按当前排序和固定每页 3 条进行偏移分页：首次为 `A B C | D E F`。看过第一页后若顶部插入 X，新第二页变为 `C D E`，C 会重复，X 不会自动插回已看过的第一页；若删除已看过的 B，第二页变为 `E F G`，D 可能被跳过。按热度等排序重新排列也会产生类似边界变化。该例是分页算法推演，未向真实站点执行增删测试，不表示每个源都有相同服务端实现。
 
-【已实现：静态依据】搜索适配器中，JM 的 `JmNetwork.searchNew`、哔咔 `PicacgNetwork.search`、HT `HtmangaNetwork.getComicList`、NHentai `NhentaiNetwork.search` 都发送页码参数或页码 URL。EH 主页/热门/搜索经 `lib/comic_source/built_in/ehentai.dart → _EhentaiGalleriesLoader` 缓存结果，并跟随 `EhNetwork.getGalleries` 从网页 `dnext` 提取的下一页链接；UI 页号不等于直接向 EH 发送同一页号。EH 的游标/服务端动态变化语义尚未在线验证，不能直接套用页码示例保证一定重复、遗漏或稳定。
+【已实现：静态依据】搜索适配器中，JM 的 `JmNetwork.searchNew`、哔咔 `PicacgNetwork.search`、HT `HtmangaNetwork.getComicList`、NHentai `NhentaiNetwork.search` 都发送页码参数或页码 URL。EH 经 `lib/network/eh_network/eh_gallery_page_loader.dart → EhGalleryPageLoader` 缓存结果，并跟随 `EhNetwork.getGalleries` 从网页 `dnext` 提取的下一页链接。应用页号先换算为源页组，再由 EH 适配器按链接解析个别源页。EH 的游标在服务端动态变化时的表现仍待在线核对。
 
 多选键仍是 `(FavoriteType.key, target)`，收藏写入也按 `(target,type)` 查重，所以列表出现重复卡片不代表同一收藏夹会重复写入。已加载元数据不会因远端删除而主动失效，仍可能保存为本地收藏，之后详情/阅读可能不可用。分页切页与连续追加均保留选择；显式刷新/切换范围等边界仍清空。
 

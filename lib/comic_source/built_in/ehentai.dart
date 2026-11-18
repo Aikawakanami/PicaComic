@@ -8,6 +8,7 @@ import 'package:pica_comic/foundation/history.dart';
 import 'package:pica_comic/foundation/image_loader/cached_image.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/network/base_comic.dart';
+import 'package:pica_comic/network/eh_network/eh_gallery_page_loader.dart';
 import 'package:pica_comic/network/eh_network/eh_main_network.dart';
 import 'package:pica_comic/network/eh_network/eh_models.dart';
 import 'package:pica_comic/network/res.dart';
@@ -605,7 +606,7 @@ class _SearchOptionsState extends State<_SearchOptions> {
   }
 }
 
-class _EhentaiGalleriesLoader {
+class _EhentaiGalleriesLoader extends EhGalleryPageLoader {
   static final instances = <String, _EhentaiGalleriesLoader>{};
 
   static void clean() {
@@ -625,52 +626,6 @@ class _EhentaiGalleriesLoader {
     }
   }
 
-  _EhentaiGalleriesLoader({required this.firstPageLoader});
-
-  final Future<Res<Galleries>> Function() firstPageLoader;
-
-  String? nextPage;
-
-  List<List<BaseComic>> cache = [];
-
-  Future<Res<List<BaseComic>>> call(int page) async {
-    if (page == 1 || cache.isEmpty) {
-      var res = await firstRequest();
-      if (res.error) {
-        return Res.fromErrorRes(res);
-      }
-    }
-    page--;
-    while (page >= cache.length) {
-      var res = await loadNext();
-      if(res.error) {
-        return Res.fromErrorRes(res);
-      }
-    }
-    if (nextPage == null) {
-      return Res(cache[page], subData: cache.length);
-    }
-    return Res(cache[page]);
-  }
-
-  Future<Res<void>> firstRequest() async {
-    cache.clear();
-    var res = await firstPageLoader();
-    if (res.error) {
-      return Res.fromErrorRes(res);
-    }
-    cache.add(res.data.galleries);
-    nextPage = res.data.next;
-    return const Res(null);
-  }
-
-  Future<Res<void>> loadNext() async {
-    var res = await EhNetwork().getGalleries(nextPage!);
-    if (res.error) {
-      return Res.fromErrorRes(res);
-    }
-    cache.add(res.data.galleries);
-    nextPage = res.data.next;
-    return const Res(null);
-  }
+  _EhentaiGalleriesLoader({required super.firstPageLoader})
+      : super(nextPageLoader: (url) => EhNetwork().getGalleries(url));
 }

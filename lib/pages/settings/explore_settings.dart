@@ -38,6 +38,17 @@ Widget buildExploreSettings(BuildContext context, bool popUp) {
         options: ["连续模式".tl, "分页模式".tl],
         settingsIndex: 25,
       ),
+      SelectSetting(
+        leading: const Icon(Icons.layers_outlined),
+        title: "分页容量".tl,
+        values: const ["1X", "2X", "3X"],
+        initialValue: appdata.appSettings.browseSourcePagesPerPage - 1,
+        onChanged: (index) {
+          appdata.appSettings.browseSourcePagesPerPage = index + 1;
+          appdata.updateSettings();
+          MyApp.updater?.call();
+        },
+      ),
       NewPageSetting(
           title: "关键词屏蔽".tl,
           onTap: () => showPopUpWidget(context,

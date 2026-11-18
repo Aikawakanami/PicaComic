@@ -8,6 +8,8 @@ import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/network/base_comic.dart';
+import 'package:pica_comic/network/eh_network/eh_gallery_page_loader.dart';
+import 'package:pica_comic/network/eh_network/eh_models.dart';
 import 'package:pica_comic/network/res.dart';
 import 'package:pica_comic/tools/translations.dart';
 
@@ -81,6 +83,7 @@ void main() {
   });
   setUp(() {
     appdata.settings[25] = '1';
+    appdata.appSettings.browseSourcePagesPerPage = 1;
     appdata.settings[64] = '0';
     appdata.settings[72] = '0';
     appdata.settings[73] = '0';
@@ -94,6 +97,129 @@ void main() {
             FixtureTile(item as FixtureComic),
       )
     ];
+  });
+
+  test('grouped paging uses source order, caches pages and rounds up totals',
+      () async {
+    final logic = ComicsPageLogic<int>();
+    addTearDown(logic.selection.dispose);
+    final calls = <int>[];
+    Future<Res<List<int>>> load(int page) async {
+      calls.add(page);
+      return Res([page], subData: 5);
+    }
+
+    logic.updateMode(true, sourcePagesPerPage: 2);
+    logic.get(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.dividedComics![1], [1, 2]);
+    expect(logic.maxPage, 3);
+    logic.selection.begin(favorite('A'));
+    logic.changePage(2);
+    logic.get(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.dividedComics![2], [3, 4]);
+    logic.changePage(3);
+    logic.get(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.dividedComics![3], [5]);
+    logic.changePage(1);
+    expect(logic.loading, isFalse);
+    expect(logic.dividedComics![1], [1, 2]);
+    expect(calls, [1, 2, 3, 4, 5]);
+    expect(logic.selection.isSelected(favorite('A')), isTrue);
+
+    logic.updateMode(true, sourcePagesPerPage: 3);
+    logic.get(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.maxPage, 2);
+    expect(logic.dividedComics![1], [1, 2, 3]);
+    expect(logic.dividedComics![2], isNull);
+    expect(logic.selection.isSelected(favorite('A')), isTrue);
+
+    logic.updateMode(false, sourcePagesPerPage: 3);
+    logic.get(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.comics, [1]);
+    expect(logic.groupsSourcePages, isFalse);
+    logic.loadNextPage(load);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.comics, [1, 2]);
+    expect(calls, [1, 2, 3, 4, 5, 1, 2, 3, 1, 2]);
+  });
+
+  test('EH follows links and retries the same failed link after a jump',
+      () async {
+    final calls = <String>[];
+    Galleries galleries(String id, String? next) => Galleries()
+      ..galleries = [EhGalleryBrief(id, '', '', '', '', 0, id, [])]
+      ..next = next;
+    final loader = EhGalleryPageLoader(firstPageLoader: () async {
+      calls.add('first');
+      return Res(galleries('A', '?next=b'));
+    }, nextPageLoader: (url) async {
+      calls.add(url);
+      if (url == '?next=b') return Res(galleries('B', '?next=c'));
+      if (calls.where((link) => link == url).length == 1) {
+        return const Res.error('fixture error');
+      }
+      return Res(galleries('C', null));
+    });
+    final logic = ComicsPageLogic<EhGalleryBrief>();
+    addTearDown(logic.selection.dispose);
+    logic.updateMode(true, sourcePagesPerPage: 2);
+    logic.get(loader.call);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.maxPage, isNull);
+    expect(logic.dividedComics![1]!.map((comic) => comic.id), ['A', 'B']);
+
+    logic.changePage(5);
+    logic.get(loader.call);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.message, 'fixture error');
+    logic.retry();
+    logic.get(loader.call);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.current, 2);
+    expect(logic.maxPage, 2);
+    logic.get(loader.call);
+    await Future<void>.delayed(Duration.zero);
+    expect(logic.dividedComics![2]!.map((comic) => comic.id), ['C']);
+    expect(calls, ['first', '?next=b', '?next=c', '?next=c']);
+  });
+
+  testWidgets('partial group stays visible during failure and retry',
+      (tester) async {
+    appdata.appSettings.browseSourcePagesPerPage = 3;
+    final calls = <int>[];
+    final retried = Completer<Res<List<FixtureComic>>>();
+    final page = FixturePage((number) async {
+      calls.add(number);
+      if (number == 2) {
+        if (calls.length == 2) return const Res.error('fixture error');
+        return retried.future;
+      }
+      return Res([FixtureComic('$number')], subData: 3);
+    });
+    await tester.pumpWidget(MaterialApp(
+        navigatorKey: App.navigatorKey, home: Scaffold(body: page)));
+    await frame(tester);
+    expect(calls, [1, 2]);
+    expect(find.text('Fixture 1'), findsOneWidget);
+    expect(find.text('源页加载失败'), findsOneWidget);
+    await tester.tap(find.text('重试'));
+    await frame(tester);
+    expect(calls, [1, 2, 2]);
+    expect(find.text('Fixture 1'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    retried.complete(const Res([FixtureComic('2')], subData: 3));
+    await frame(tester);
+    expect(calls, [1, 2, 2, 3]);
+    expect(find.text('Fixture 1'), findsOneWidget);
+    expect(find.text('Fixture 2'), findsOneWidget);
+    expect(find.text('Fixture 3'), findsOneWidget);
+    expect(find.text('源页加载失败'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   test(
