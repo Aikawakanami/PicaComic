@@ -123,6 +123,8 @@ class PreSearchController extends StateController {
   String? language;
 
   bool limitHistory = true;
+  bool historyExpanded = true;
+  bool favoritesExpanded = true;
 
   void updateOptions() {
     for (var source in ComicSource.sources) {
@@ -294,7 +296,7 @@ class PreSearchPage extends StatelessWidget {
         if (controller.text.removeAllBlank.isEmpty ||
             controller.text.endsWith(" ") ||
             searchController.suggestions.isEmpty) {
-          return buildMainView(context, logic);
+          return buildMainView(context);
         } else {
           return buildSuggestions(context);
         }
@@ -305,7 +307,7 @@ class PreSearchPage extends StatelessWidget {
     );
   }
 
-  Widget buildMainView(BuildContext context, PreSearchController logic) {
+  Widget buildMainView(BuildContext context) {
     final showSideBar = MediaQuery.of(context).size.width > 950;
     var addWidth = (MediaQuery.of(context).size.width - 950) * 0.25;
     addWidth = addWidth.clamp(0, 50);
@@ -316,7 +318,9 @@ class PreSearchPage extends StatelessWidget {
           SizedBox(
             width: 250 + addWidth,
             height: double.infinity,
-            child: buildHistorySideBar(),
+            child: CustomScrollView(
+              slivers: [buildSearchSection(context, history: true)],
+            ),
           ),
         if (showSideBar)
           const VerticalDivider(
@@ -335,7 +339,11 @@ class PreSearchPage extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               child: buildSearchOptions(context).toSliver(),
             ),
-            if (!showSideBar) ...buildHistoryAndFavoritesForMobile(logic),
+            if (!showSideBar) ...[
+              buildSearchSection(context,
+                  history: true, limitHistoryOnOpen: true),
+              buildSearchSection(context, history: false),
+            ],
             SliverPadding(
               padding: EdgeInsets.only(bottom: context.padding.bottom),
             )
@@ -349,7 +357,9 @@ class PreSearchPage extends StatelessWidget {
           SizedBox(
             width: 250 + addWidth,
             height: double.infinity,
-            child: buildFavoriteSideBar(),
+            child: CustomScrollView(
+              slivers: [buildSearchSection(context, history: false)],
+            ),
           ),
       ],
     );
@@ -409,7 +419,7 @@ class PreSearchPage extends StatelessWidget {
         Widget widget;
 
         if (controller.text.removeAllBlank.isEmpty) {
-          widget = buildMainView(context, logic);
+          widget = buildMainView(context);
         } else {
           bool showMethod = MediaQuery.of(context).size.width < 600;
           bool showTranslation = App.locale.languageCode == "zh";
@@ -782,104 +792,86 @@ class PreSearchPage extends StatelessWidget {
     );
   }
 
-  Widget buildHistorySideBar() {
+  Widget buildSearchSection(
+    BuildContext context, {
+    required bool history,
+    bool limitHistoryOnOpen = false,
+  }) {
+    final sectionId = history ? "history" : "favorites";
+    final theme = Theme.of(context);
     return StateBuilder<PreSearchController>(
-      id: "history",
+      id: sectionId,
       builder: (logic) {
-        return ListView.builder(
-          padding: EdgeInsets.zero,
-          itemCount: appdata.searchHistory.length + 1,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return ListTile(
-                leading: const Icon(Icons.history),
-                title: Text("历史搜索".tl),
-                trailing: buildClearHistoryButton(logic),
-              );
-            } else {
-              var history =
-                  appdata.searchHistory[appdata.searchHistory.length - index];
-              return buildHistoryItem(history, logic);
-            }
-          },
-        );
-      },
-    );
-  }
-
-  Widget buildFavoriteSideBar() {
-    return StateBuilder<PreSearchController>(
-      builder: (logic) => ListView.builder(
-        padding: EdgeInsets.zero,
-        itemCount: appdata.favoriteTags.length + 1,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return ListTile(
-              leading: const Icon(Icons.favorite_border),
-              title: Text("收藏".tl),
-              trailing: buildClearFavoriteButton(logic),
-            );
-          } else {
-            final s = appdata.favoriteTags.elementAt(index - 1);
-            return buildFavoriteItem(s, logic);
-          }
-        },
-      ),
-    );
-  }
-
-  Iterable<Widget> buildHistoryAndFavoritesForMobile(
-      PreSearchController logic) sync* {
-    yield const Divider().paddingHorizontal(16).toSliver();
-    yield ListTile(
-      leading: const Icon(Icons.history),
-      title: Text("历史搜索".tl),
-      trailing: buildClearHistoryButton(logic),
-    ).toSliver();
-    yield StateBuilder<PreSearchController>(
-      id: "history",
-      builder: (logic) {
-        var length = appdata.searchHistory.length;
-        if (length < 10) {
-          logic.limitHistory = false;
-        }
-        if (logic.limitHistory) {
-          length = length.clamp(0, 10);
-        }
-        return SliverList.builder(
-          itemCount: length,
-          itemBuilder: (context, index) {
-            if (index == length - 1 && logic.limitHistory) {
-              return TextButton(
-                child: Text("查看更多".tl),
-                onPressed: () {
-                  logic.limitHistory = false;
-                  logic.update(["history"]);
+        final expanded =
+            history ? logic.historyExpanded : logic.favoritesExpanded;
+        return SliverMainAxisGroup(
+          slivers: [
+            Theme(
+              data: theme.copyWith(
+                splashFactory: NoSplash.splashFactory,
+                highlightColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                shape: const Border(),
+                collapsedShape: const Border(),
+                leading: Icon(history ? Icons.history : Icons.favorite_border),
+                initiallyExpanded: expanded,
+                title: Row(
+                  children: [
+                    Expanded(child: Text(history ? "历史搜索".tl : "收藏".tl)),
+                    Theme(
+                      data: theme,
+                      child: history
+                          ? buildClearHistoryButton(logic)
+                          : buildClearFavoriteButton(logic),
+                    ),
+                  ],
+                ),
+                onExpansionChanged: (expanded) {
+                  if (history) {
+                    logic.historyExpanded = expanded;
+                  } else {
+                    logic.favoritesExpanded = expanded;
+                  }
+                  logic.update([sectionId]);
                 },
-              ).toAlign(Alignment.center);
-            }
-            var history =
-                appdata.searchHistory[appdata.searchHistory.length - index - 1];
-            return buildHistoryItem(history, logic);
-          },
+              ),
+            ).toSliver(),
+            // Keep the entries in the outer scroll view so they build lazily.
+            if (expanded)
+              history
+                  ? buildHistoryList(logic, limitHistoryOnOpen)
+                  : SliverList.builder(
+                      itemCount: appdata.favoriteTags.length,
+                      itemBuilder: (context, index) => buildFavoriteItem(
+                          appdata.favoriteTags.elementAt(index), logic),
+                    ),
+          ],
         );
       },
     );
-    yield const Divider().paddingHorizontal(16).toSliver();
-    yield ListTile(
-      leading: const Icon(Icons.favorite_border),
-      title: Text("收藏".tl),
-      trailing: buildClearFavoriteButton(logic),
-    ).toSliver();
+  }
 
-    yield StateBuilder<PreSearchController>(
-      builder: (logic) => SliverList.builder(
-        itemCount: appdata.favoriteTags.length,
-        itemBuilder: (context, index) {
-          final s = appdata.favoriteTags.elementAt(index);
-          return buildFavoriteItem(s, logic);
-        },
-      ),
+  Widget buildHistoryList(PreSearchController logic, bool limitHistoryOnOpen) {
+    final history = appdata.searchHistory;
+    if (limitHistoryOnOpen && history.length < 10) {
+      logic.limitHistory = false;
+    }
+    final limited = limitHistoryOnOpen && logic.limitHistory;
+    return SliverList.builder(
+      itemCount: limited ? 10 : history.length,
+      itemBuilder: (context, index) {
+        if (limited && index == 9) {
+          return TextButton(
+            child: Text("查看更多".tl),
+            onPressed: () {
+              logic.limitHistory = false;
+              logic.update(["history"]);
+            },
+          ).toAlign(Alignment.center);
+        }
+        return buildHistoryItem(history[history.length - index - 1], logic);
+      },
     );
   }
 }

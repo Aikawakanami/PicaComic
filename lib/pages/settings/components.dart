@@ -6,6 +6,7 @@ class SwitchSetting extends StatefulWidget {
       this.subTitle,
       required this.icon,
       required this.settingsIndex,
+      this.onChanged,
       super.key});
 
   final String title;
@@ -15,6 +16,7 @@ class SwitchSetting extends StatefulWidget {
   final Widget icon;
 
   final int settingsIndex;
+  final VoidCallback? onChanged;
 
   @override
   State<SwitchSetting> createState() => _SwitchSettingState();
@@ -34,6 +36,7 @@ class _SwitchSettingState extends State<SwitchSetting> {
             appdata.settings[widget.settingsIndex] = value ? '1' : '0';
             appdata.updateSettings();
           });
+          widget.onChanged?.call();
         },
       ),
     );
@@ -121,6 +124,7 @@ class SelectSetting extends StatelessWidget {
     required this.values,
     required this.onChanged,
     required this.initialValue,
+    this.width = 136,
   });
 
   final Widget leading;
@@ -132,6 +136,7 @@ class SelectSetting extends StatelessWidget {
   final void Function(int i) onChanged;
 
   final int initialValue;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +156,7 @@ class SelectSetting extends StatelessWidget {
           leading: leading,
           title: Text(title),
           trailing: Select(
-            width: 136,
+            width: width,
             initialValue: initialValue,
             onChange: onChanged,
             values: values,

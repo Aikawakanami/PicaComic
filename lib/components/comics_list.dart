@@ -564,9 +564,6 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
   }
 
   Widget? _buildGroupStatus(ComicsPageLogic<T> logic) {
-    if (logic.loading) {
-      return const SliverToBoxAdapter(child: LinearProgressIndicator());
-    }
     final message = logic.message;
     if (message == null) return null;
     return SliverToBoxAdapter(

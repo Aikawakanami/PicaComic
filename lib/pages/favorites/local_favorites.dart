@@ -1,6 +1,7 @@
 import 'package:pica_comic/foundation/reading_metadata.dart';
 import 'package:pica_comic/foundation/reading_image_count.dart';
 import 'package:pica_comic/foundation/reading_stats.dart';
+import 'package:pica_comic/foundation/favorite_query.dart';
 import 'package:flutter_reorderable_grid_view/widgets/reorderable_builder.dart';
 import 'package:pica_comic/base.dart';
 import 'package:pica_comic/foundation/history.dart';
@@ -333,7 +334,11 @@ class RenameFolderDialog extends StatelessWidget {
 class LocalFavoriteTile extends ComicTile {
   const LocalFavoriteTile(
       this.comic, this.folderName, this.onDelete, this._enableLongPressed,
-      {this.showFolderInfo = false, this.onLongPressed, this.onTap, super.key});
+      {this.showFolderInfo = false,
+      this.sort = FavoriteSort.manual,
+      this.onLongPressed,
+      this.onTap,
+      super.key});
 
   final FavoriteItem comic;
 
@@ -349,6 +354,7 @@ class LocalFavoriteTile extends ComicTile {
   final void Function()? onLongPressed;
 
   final bool showFolderInfo;
+  final FavoriteSort sort;
 
   static Map<(int, String, String), File> cache = {};
 
@@ -360,15 +366,35 @@ class LocalFavoriteTile extends ComicTile {
   bool get enableLongPressed => _enableLongPressed;
 
   @override
-  String get description => "${comic.time} | ${comic.type.name}";
+  String get description => "$lastReadLabel | ${comic.type.name}";
+
+  String get lastReadLabel =>
+      appdata.appSettings.favoriteReadDateFormat.format(comic.time);
+
+  String durationLabel(ReadingMetrics metrics) =>
+      appdata.appSettings.favoriteReadDurationFormat.format(metrics);
+
+  @override
+  ({String label, String value})? get sortMetricBadge {
+    if (!appdata.appSettings.favoriteBadgeFollowsSort) return null;
+    return switch (sort) {
+      FavoriteSort.manual || FavoriteSort.imageCount => null,
+      FavoriteSort.lastRead =>
+        (label: "最后阅读时间".tl, value: lastReadLabel),
+      FavoriteSort.readCount =>
+        (label: "阅读次数".tl, value: comic.metrics.count.toString()),
+      FavoriteSort.readTime =>
+        (label: "阅读时长".tl, value: durationLabel(comic.metrics)),
+    };
+  }
 
   @override
   Widget buildSubDescription(BuildContext context) {
     final metrics = comic.metrics;
     return Tooltip(message:'${"阅读次数".tl}: ${metrics.count}\n'
-        '${"阅读时长".tl}: ${metrics.durationLabel}\n${"图片数量".tl}: ${metrics.imageLabel.tl}',
+        '${"阅读时长".tl}: ${durationLabel(metrics)}\n${"图片数量".tl}: ${metrics.imageLabel.tl}',
       child: Align(alignment:Alignment.centerLeft,child:FittedBox(fit:BoxFit.scaleDown,
-        child:Text('${"阅读".tl} ${metrics.count} · ${metrics.durationLabel} · ${metrics.imageLabel.tl} P',
+        child:Text('${"阅读".tl} ${metrics.count} · ${durationLabel(metrics)} · ${metrics.imageLabel.tl} P',
           maxLines:1,style:const TextStyle(fontSize:12)))));
   }
 
@@ -573,8 +599,8 @@ class LocalFavoriteTile extends ComicTile {
                       ),
                     ),
                     Padding(padding:const EdgeInsets.symmetric(horizontal:16,vertical:4),
-                      child:Text('${"最后阅读时间".tl}: ${comic.time}\n'
-                        '${"阅读次数".tl}: ${comic.metrics.count} · ${"阅读时长".tl}: ${comic.metrics.durationLabel}\n'
+                      child:Text('${"最后阅读时间".tl}: $lastReadLabel\n'
+                        '${"阅读次数".tl}: ${comic.metrics.count} · ${"阅读时长".tl}: ${durationLabel(comic.metrics)}\n'
                         '${"图片数量".tl}: ${comic.metrics.imageLabel.tl}',
                         style:Theme.of(context).textTheme.bodySmall)),
                     const Divider(),

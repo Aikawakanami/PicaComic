@@ -20,6 +20,38 @@ class _LocalFavoritesSettingsState extends State<LocalFavoritesSettings> {
           trailing:Select(values:favoritePageSizes.map((size)=>'$size').toList(),
             initialValue:favoritePageSizes.indexOf(normalizeFavoritePageSize(int.tryParse(appdata.settings[91]))),
             onChange:(i) { appdata.settings[91] = '${favoritePageSizes[i]}'; appdata.updateSettings(); })),
+        SwitchSetting(
+          title: "角标跟随排序".tl,
+          subTitle: "关闭后统一显示阅读进度".tl,
+          icon: const Icon(Icons.sort),
+          settingsIndex: 96,
+          onChanged: () => MyApp.updater?.call(),
+        ),
+        SelectSetting(
+          leading: const Icon(Icons.event),
+          title: "最后阅读时间格式".tl,
+          values: FavoriteReadDateFormat.values.map((format) => format.pattern).toList(),
+          initialValue: appdata.appSettings.favoriteReadDateFormat.index,
+          width: 180,
+          onChanged: (index) {
+            appdata.appSettings.favoriteReadDateFormat =
+                FavoriteReadDateFormat.values[index];
+            appdata.updateSettings();
+            MyApp.updater?.call();
+          },
+        ),
+        SelectSetting(
+          leading: const Icon(Icons.timer_outlined),
+          title: "阅读时长格式".tl,
+          values: FavoriteReadDurationFormat.values.map((format) => format.pattern).toList(),
+          initialValue: appdata.appSettings.favoriteReadDurationFormat.index,
+          onChanged: (index) {
+            appdata.appSettings.favoriteReadDurationFormat =
+                FavoriteReadDurationFormat.values[index];
+            appdata.updateSettings();
+            MyApp.updater?.call();
+          },
+        ),
         ListTile(
           leading: const Icon(Icons.book),
           title: Text("快速收藏".tl),

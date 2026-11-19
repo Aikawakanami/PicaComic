@@ -6,6 +6,45 @@ typedef FavoriteKey = (int, String);
 
 enum FavoriteSort { manual, lastRead, readCount, readTime, imageCount }
 
+enum FavoriteReadDateFormat {
+  dash('yyyy-MM-dd HH:mm:ss'),
+  slash('yyyy/MM/dd HH:mm:ss');
+
+  const FavoriteReadDateFormat(this.pattern);
+  final String pattern;
+
+  String format(String time) {
+    if (this == dash || time.length < 10) return time;
+    return time.substring(0, 10).replaceAll('-', '/') + time.substring(10);
+  }
+}
+
+enum FavoriteReadDurationFormat {
+  hoursClock('HH:mm:ss'),
+  minutesClock('mm:ss'),
+  hoursUnits('XhXmXs'),
+  minutesSeconds('XmXs'),
+  minutesOnly('Xm');
+
+  const FavoriteReadDurationFormat(this.pattern);
+  final String pattern;
+
+  String format(ReadingMetrics metrics) {
+    final duration = Duration(milliseconds: metrics.elapsedMs);
+    final totalMinutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return switch (this) {
+      hoursClock => metrics.durationLabel,
+      minutesClock =>
+        "${totalMinutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}",
+      hoursUnits =>
+        '${duration.inHours}h${totalMinutes % 60}m${seconds}s',
+      minutesSeconds => '${totalMinutes}m${seconds}s',
+      minutesOnly => '${totalMinutes}m',
+    };
+  }
+}
+
 const favoritePageSizes = [20, 40, 60, 80, 100];
 const defaultFavoritePageSize = 60;
 int normalizeFavoritePageSize(int? size) =>

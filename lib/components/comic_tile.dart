@@ -47,6 +47,7 @@ abstract class ComicTile extends StatelessWidget {
   String? get unreadImageCountLabel => null;
   ({int page, String total, bool complete})? readingProgressBadge(
       History? history) => null;
+  ({String label, String value})? get sortMetricBadge => null;
   bool get showLegacyCompletion => true;
 
   bool get showFavorite => true;
@@ -343,19 +344,22 @@ abstract class ComicTile extends StatelessWidget {
     var isFavorite = appdata.settings[72] == '1'
         ? LocalFavoritesManager().isExist(comicID!)
         : false;
-    var history = appdata.settings[73] == '1' && historyComicID != null
+    final metric = sortMetricBadge;
+    var history = metric == null && appdata.settings[73] == '1' &&
+            historyComicID != null
         ? HistoryManager().findSync(historyComicID!)
         : null;
     if(history != null && !matchesReadingHistory(history)) history = null;
     if (history?.page == 0 && !showUnreadImageCount) {
       history!.page = 1;
     }
-    final progress = appdata.settings[73] == '1'
+    final progress = metric == null && appdata.settings[73] == '1'
         ? readingProgressBadge(history)
         : null;
     final hasHistory =
         history != null && (!showUnreadImageCount || history.page > 0);
-    final imageCount = showUnreadImageCount && !hasHistory && progress == null
+    final imageCount = metric == null && showUnreadImageCount &&
+            !hasHistory && progress == null
         ? unreadImageCountLabel
         : null;
     final int? page = progress?.page ?? (hasHistory ? history.page : null);
@@ -373,7 +377,7 @@ abstract class ComicTile extends StatelessWidget {
                 ? '$page'
                 : '$page/$total';
 
-    if (!isFavorite && progressLabel == null) return child;
+    if (!isFavorite && progressLabel == null && metric == null) return child;
 
     Widget readingBadgeCell({
       int? page,
@@ -398,6 +402,68 @@ abstract class ComicTile extends StatelessWidget {
       );
     }
 
+    final badge = Container(
+      height: 24,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showCheckInFavorite)
+            readingBadgeCell(complete: true, background: Colors.green)
+          else if (isFavorite)
+            Container(
+              height: 24,
+              width: 24,
+              color: Colors.green,
+              child: const Icon(
+                Icons.bookmark_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+            ),
+          if (metric != null)
+            Flexible(
+              child: Semantics(
+                label: '${metric.label}: ${metric.value}',
+                excludeSemantics: true,
+                child: Container(
+                  height: 24,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  color: Colors.blue.withValues(alpha: 0.9),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(metric.value,
+                        style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                ),
+              ),
+            )
+          else if (progressLabel != null)
+            Semantics(
+              label: progressLabel,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (showCompletedTotal) readingBadgeCell(total: total),
+                  if (!showCheckInFavorite)
+                    readingBadgeCell(
+                      page: page,
+                      total: total,
+                      complete: complete,
+                      paintKey: imageCount == null
+                          ? null
+                          : ValueKey('unread-image-count-$comicID'),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
     return Stack(
       children: [
         Positioned.fill(
@@ -406,49 +472,10 @@ abstract class ComicTile extends StatelessWidget {
         Positioned(
           left: detailedMode ? 16 : 6,
           top: 8,
-          child: Container(
-            height: 24,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Row(
-              children: [
-                if (showCheckInFavorite)
-                  readingBadgeCell(complete: true, background: Colors.green)
-                else if (isFavorite)
-                  Container(
-                    height: 24,
-                    width: 24,
-                    color: Colors.green,
-                    child: const Icon(
-                      Icons.bookmark_rounded,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                  ),
-                if (progressLabel != null)
-                  Semantics(
-                    label: progressLabel,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (showCompletedTotal) readingBadgeCell(total: total),
-                        if (!showCheckInFavorite)
-                          readingBadgeCell(
-                            page: page,
-                            total: total,
-                            complete: complete,
-                            paintKey: imageCount == null
-                                ? null
-                                : ValueKey('unread-image-count-$comicID'),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          right: metric == null ? null : (detailedMode ? 16 : 6),
+          child: metric == null
+              ? badge
+              : Align(alignment: Alignment.topLeft, child: badge),
         )
       ],
     );

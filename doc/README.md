@@ -9,12 +9,14 @@
 | 启动、分层、导航与状态 | [架构](architecture.md) | 组合根与宏观依赖 |
 | 实体、类型编码、SQLite、迁移 | [数据模型](data-model.md) | 身份、持久化与合并约束 |
 | 搜索到阅读、安装源、下载恢复、收藏同步 | [业务流程](business-flows.md) | 四条代表性跨模块调用链 |
+| 搜索页的历史搜索和收藏折叠 | [搜索页折叠分组](business-flows.md#搜索页折叠分组) | 两组独立开合、清空入口与列表按需构建 |
 | JS／Dart 契约、HTTP、Cookie、代理、WebDAV | [接口与集成](api-integrations.md) | 客户端契约与外部边界 |
 | 扩展漫画源 | [漫画源模块](modules/comic-sources.md) | 注册、解析、JS 桥接与修改入口 |
 | 分页容量 1X／2X／3X | [源页合并](changes/2026-11-19-source-page-grouping.md) | 应用页映射、EH 顺序链接、部分失败与重试 |
 | 连续加载失败不跳页与来源/ID去重（暂缓） | [待实施方案](changes/2026-11-17-continuous-loading-plan.md) | 失败暂停、按入口决定手动跳过、无新增保护与验收建议 |
 | 阅读次数/时长与本地收藏分页排序 | [需求与实施记录](changes/2026-11-17-reading-statistics-favorites.md) | 有效会话、章节累计、图片下限、全夹排序和本地分页；已更新真机并启动，交互待验收 |
 | 本地收藏的整本阅读进度与已读完标识 | [逐章最远阅读进度](changes/2026-11-19-chapter-reading-progress.md) | 逐章进度、旧续读位置、用户数据包兼容 |
+| 本地收藏角标跟随排序与时间格式 | [排序与角标](changes/2026-11-17-reading-statistics-favorites.md#角标与时间格式2026-11-20) | 默认进度、排序指标和格式设置 |
 | 收藏未读图片数、旧页数排序与分页底部空白 | [显示修复](changes/2026-11-18-favorites-display-fixes.md) | 旧历史数量只读回退、取消排序恢复手动、去除重复安全区 |
 | 导入后的旧收藏顺序与新收藏默认位置 | [收藏顺序恢复](changes/2026-11-19-favorite-order-recovery.md) | 原始导出比对、只校正旧项位置、新收藏默认放最前 |
 | 详情封面失效及本地收藏、历史封面更新 | [封面回退与修复](changes/2026-11-19-detail-cover-fallback.md) | 共用回退、感叹号占位、显示成功后回写封面 |

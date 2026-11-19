@@ -211,7 +211,7 @@ void main() {
     await frame(tester);
     expect(calls, [1, 2, 2]);
     expect(find.text('Fixture 1'), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     retried.complete(const Res([FixtureComic('2')], subData: 3));
     await frame(tester);
     expect(calls, [1, 2, 2, 3]);

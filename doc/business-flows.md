@@ -23,6 +23,16 @@
 
 失败边界：普通网络／解析错误通常转换为 `Res.error`；但 `JmNetwork.getComicInfo` 在部分“Empty data”路径显式抛异常，不能说所有失败都由 `Res` 表达。章节 `Res.error` 被 `ComicReadingPage.loadInfo` 写入 `logic.errorMessage`；图片失败由图片 provider／控件处理。实际重试、失效会话及图片错误 UI 尚未验证。
 
+### 搜索页折叠分组
+
+【已实现：静态依据】`lib/pages/pre_search_page.dart → PreSearchPage.buildSearchSection` 用 Flutter 的 `ExpansionTile` 显示「历史搜索」和「收藏」标题。两组默认展开，分别由 `PreSearchController.historyExpanded` 和 `favoritesExpanded` 保存当前搜索页的开合状态。窄屏在搜索选项下显示，宽屏沿用左右栏位置。标题中的清空按钮继续使用原有二次确认，组内条目继续支持点击搜索和单项移除。展开内容在外层滚动视图内按需构建，手机上的历史搜索保留「查看更多」。
+
+【已验证：执行证据】6217 测试包已构建并覆盖安装到真机。安装前备份应用数据，并在安装后核对数据库和设置文件。按用户要求未运行测试，折叠和清空交互待用户验收。
+
+【已实现：静态依据】两个分组的展开和收起状态都使用无边框的形状。标题局部关闭水波纹和按下高亮，箭头继续指示开合状态，清空按钮沿用原主题和确认行为。
+
+【已验证：执行证据】6218 已覆盖安装到真机。安装前已备份应用数据。安装时应用启动并刷新了运行配置，安装后的收藏、历史和阅读统计与备份核对一致。按用户要求未运行测试。
+
 ### 远程列表变化与分页一致性
 
 【已实现：静态依据】通用列表没有为整次浏览固定远端数据快照。`lib/components/comics_list.dart → ComicsPageLogic.loadNextPage` 请求下一逻辑页后直接 `comics.addAll(res.data)`，未做列表身份去重，也不回头核对已加载条目。分页模式在 `dividedComics` 缓存已访问的应用页，合并 2／3 个源页时还在 `_sourcePages` 缓存每个成功的源页。分组失败后重试复用本组缓存，显式刷新清除缓存。详见[源页合并](changes/2026-11-19-source-page-grouping.md)。

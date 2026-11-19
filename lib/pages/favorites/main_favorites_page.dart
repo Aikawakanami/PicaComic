@@ -897,6 +897,7 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
                         onTap: () => widget.onClick(comic),
                         onLongPressed: () => widget.onLongPressed(comic),
                         showFolderInfo: true,
+                        sort: options.sort,
                       );
                       StateController.find<FavoritesPageController>()
                           .openComicMenuFuncs[comic] = tile.showMenu;

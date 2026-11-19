@@ -125,6 +125,9 @@ class Appdata {
     "60", //91 本地收藏每页数量
     "{}", //92 本地收藏各文件夹浏览与排序配置
     "1", //93 每个应用页合并的源页数，仅用于远程分页
+    "dash", //94 本地收藏最后阅读时间显示格式
+    "hoursClock", //95 本地收藏阅读时长显示格式
+    "1", //96 本地收藏角标跟随当前排序
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -359,6 +362,24 @@ class _Settings {
   set browseSourcePagesPerPage(int value) {
     _settings[93] = value.toString();
   }
+
+  FavoriteReadDateFormat get favoriteReadDateFormat =>
+      FavoriteReadDateFormat.values.asNameMap()[_settings[94]] ??
+      FavoriteReadDateFormat.dash;
+
+  set favoriteReadDateFormat(FavoriteReadDateFormat value) {
+    _settings[94] = value.name;
+  }
+
+  FavoriteReadDurationFormat get favoriteReadDurationFormat =>
+      FavoriteReadDurationFormat.values.asNameMap()[_settings[95]] ??
+      FavoriteReadDurationFormat.hoursClock;
+
+  set favoriteReadDurationFormat(FavoriteReadDurationFormat value) {
+    _settings[95] = value.name;
+  }
+
+  bool get favoriteBadgeFollowsSort => _settings[96] == '1';
 
   /// build-in comic sources
   bool isComicSourceEnabled(String key) {
