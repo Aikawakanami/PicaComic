@@ -53,6 +53,12 @@ class _History extends Fake implements HistoryManager {
       : null;
 }
 
+Finder _progressBadge(String label) => find.descendant(
+      of: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.label == label),
+      matching: find.byType(CustomPaint),
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   configureTestSqlite();
@@ -185,11 +191,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         navigatorKey: App.navigatorKey, home: Scaffold(body: FavoritesPage())));
     await tester.pumpAndSettle();
-    expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('unread-image-count-0')))
-            .data,
-        '233');
+    final unread = _progressBadge('233');
+    expect(unread, findsOneWidget);
+    expect(tester.getSize(unread), const Size(16, 24));
     expect(find.byKey(const ValueKey('unread-image-count-1')), findsNothing);
     expect(
         find.byWidgetPredicate((widget) =>
@@ -198,6 +202,67 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('favorite badge shows partial, exact and finished book progress',
+      (tester) async {
+    appdata.settings[73] = '1';
+    HistoryManager.cache = _History();
+    addTearDown(() => appdata.settings[73] = '0');
+    final stats = ReadingStatistics.instance;
+    const key = ('jm', '2');
+    final chapters = List.generate(10, (index) => 'chapter-$index');
+    for (final chapter in chapters.take(3)) {
+      stats.recordChapter(key, chapter, 20, catalog: chapters);
+    }
+    stats.recordProgress(key, {for (final chapter in chapters.take(3)) chapter: 20});
+    await tester.pumpWidget(MaterialApp(
+        navigatorKey: App.navigatorKey, home: Scaffold(body: FavoritesPage())));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(_progressBadge('60/60+')), const Size(16, 24));
+    final finished = _progressBadge('200，已读完');
+
+    stats.recordTotal(key, 200);
+    StateController.find<SimpleController>(tag: 'ComicsPageView fixture').refresh();
+    await tester.pumpAndSettle();
+    final exactProgress = _progressBadge('60/200');
+    expect(tester.getSize(exactProgress), const Size(16, 24));
+    final oldTotal = TextPainter(
+      text: const TextSpan(text: '/200', style: TextStyle(fontSize: 8)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final oldTotalOffset = Offset(16 - oldTotal.width, 24 - oldTotal.height);
+    oldTotal.dispose();
+    expect(exactProgress,
+        paints
+          ..paragraph(offset: Offset.zero)
+          ..paragraph(offset: oldTotalOffset));
+    expect(finished, findsNothing);
+
+    for (final chapter in chapters.skip(3)) {
+      stats.recordChapter(key, chapter, 20, catalog: chapters);
+    }
+    stats.recordProgress(key, {for (final chapter in chapters.skip(3)) chapter: 20});
+    StateController.find<SimpleController>(tag: 'ComicsPageView fixture').refresh();
+    await tester.pumpAndSettle();
+    expect(finished, findsNWidgets(2));
+    expect(tester.getSize(finished.first), const Size(16, 24));
+    expect(tester.getSize(finished.last), const Size(16, 24));
+    expect(tester.getTopLeft(finished.last) - tester.getTopLeft(finished.first),
+        const Offset(24, 0));
+    expect(finished.last,
+        paints
+          ..line(
+            p1: const Offset(16 * 0.2, 24 * 0.5),
+            p2: const Offset(16 * 0.45, 24 * 0.75),
+            strokeWidth: 2,
+          )
+          ..line(
+            p1: const Offset(16 * 0.45, 24 * 0.75),
+            p2: const Offset(16 * 0.85, 24 * 0.3),
+            strokeWidth: 2,
+          ));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('cover update refreshes the current page without reordering',

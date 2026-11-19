@@ -62,7 +62,7 @@
 
 ## 阅读统计与收藏分页排序（2026-11-17）
 
-【已实现：静态依据】`lib/foundation/reading_stats.dart → ReadingStatistics` 使用独立 `reading_stats.db`（user_version=1），不把普通统计表加进按表枚举收藏夹的 local_favorite.db。模型如下：
+【已实现：静态依据】`lib/foundation/reading_stats.dart → ReadingStatistics` 使用独立 `reading_stats.db`（user_version=2），收藏文件夹继续保存在 local_favorite.db。统计模型如下。
 
 | 表 | 身份与数据 | 合并规则 |
 | --- | --- | --- |
@@ -70,6 +70,7 @@
 | comic_totals | `(source_key,comic_id)`；read_count、elapsed_ms | 从去重后的会话重新汇总，可重建 |
 | image_books | 同上；total_hint、chapter_ids、known_count、complete、updated_at | 目录/可信总数按记录时间合并，数量缓存重算 |
 | image_chapters | `(source_key,comic_id,chapter_id)`；pages、updated_at | 同章更新而非累加；按目录汇总 |
+| chapter_progress | `(source_key,comic_id,chapter_id)`，furthest_page | 每章取最大页码，导入同一份数据幂等 |
 
 `FavoriteType.sourceKey / ReadingData.statisticsIdentity` 统一统计身份：内置 htmanga 统一小写，NH 收藏类型为 6，不使用 HistoryType 的 5；Hitomi 使用收藏链接。自定义源仍需经过既有 intKey 映射，缺源/旧 hashCode 的长期兼容问题未因此解决。
 
@@ -80,6 +81,8 @@
 `FavoriteQuery` 只读关联统计汇总，先对全夹排序，保留有序 `(type,target)` 快照，再取当前页元数据，不改 display_order。快照占用与收藏夹条数相关，不是远端快照。settings[11] 为默认连续/分页，settings[91] 默认 60（20/40/60/80/100），settings[92] 保存每夹模式/排序/方向/页大小；改名移动相应配置。
 
 整包导出使用 `VACUUM INTO` 快照纳入 reading_stats.db；导入复制为 reading_stats_temp.db，在后台单库事务合并，失败保留暂存库。收藏夹 JSON 含对应身份的 reading_statistics；缺少新字段的旧包仍可导入。普通备份包含所有会话，清除后再导入可恢复；不宣称跨库/文件整包原子性。源码为 `lib/tools/io_tools.dart / init.dart / local_favorites.dart`，验证范围见[实施记录](changes/2026-11-17-reading-statistics-favorites.md)。
+
+版本 1 统计库导入后保留原有统计，逐章最远页码从后续阅读开始记录。新版数据包可恢复进度，收藏夹 JSON 中的 `progress` 为可选字段。显示和迁移规则见[逐章最远阅读进度](changes/2026-11-19-chapter-reading-progress.md)。
 
 ### 旧阅读图片数只读兼容（2026-11-18）
 

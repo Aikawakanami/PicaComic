@@ -127,6 +127,8 @@ flutter test
 
 【建议】今后切换测试包名时，先单独构建相应测试目标，使用 `aapt dump badging` 核实生成 APK 为独立测试包，再启动真机测试；测试前另行确认设备包名及快照。已有个人数据的应用不得作为 `flutter test integration_test/...` 的目标，正常入口更新使用校验包名后的 ADB `install -r`，避免测试工具自动卸载行为。
 
+逐章进度测试再次复现了相同问题。以后使用与日常 APK 分开的构建输出目录运行真机集成测试。运行前检查 **Flutter 实际会读到的** `build/app/outputs/flutter-apk/app-debug.apk`。必须先在该目录构建集成测试入口，并用 `aapt dump badging` 确认包名为 `com.github.pacalini.pica_comic.devtest.importcheck`，校验通过后才执行 `flutter test integration_test/data_import_test.dart`。还需先留存真机上日常测试包的当次私有数据快照；仅检查独立验证包未安装，无法防止 Flutter 按旧 APK 包名卸载。
+
 ## 跨页选择的本地回归与安装交付
 
 【已验证：执行证据】`flutter test --no-pub test/comic_selection_test.dart test/cross_page_selection_test.dart --reporter expanded` 共 14 项通过；定向分析为 No issues found。新增测试使用电脑端中性源/条目，不读取个人数据或调用站点；已有真机集成脚本已更新分页保留和数量文案期望，但本轮未运行。规则、模拟边界及证据见[跨页变更](changes/2026-11-16-cross-page-selection.md)。

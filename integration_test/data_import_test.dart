@@ -11,6 +11,7 @@ import 'package:pica_comic/foundation/app.dart';
 import 'package:pica_comic/foundation/history.dart';
 import 'package:pica_comic/foundation/import_database.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:pica_comic/network/cookie_jar.dart';
 import 'package:pica_comic/tools/io_tools.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -184,5 +185,31 @@ void main() {
         Directory(App.dataPath).listSync().where(
             (item) => item.path.split('/').last.startsWith('data-import-')),
         isEmpty);
+  });
+
+  testWidgets('user archive round trip restores and merges chapter progress',
+      (tester) async {
+    const key = ('jm', 'progress-fixture');
+    final stats = ReadingStatistics.instance;
+    stats.recordChapter(key, 'a', 30, catalog: ['a', 'b', 'c']);
+    stats.recordChapter(key, 'b', 15);
+    stats.recordProgress(key, {'a': 20, 'b': 7});
+    final progressArchive = '${fixtures.path}/progress.picadata';
+    await Directory('${App.dataPath}/comic_source').create(recursive: true);
+    expect(await exportDataToFile(false, progressArchive), progressArchive);
+
+    stats.clear();
+    stats.recordProgress(key, {'a': 25});
+    for (var i = 0; i < 2; i++) {
+      expect(await importDataFromFile(progressArchive, checkVersion: false),
+          isTrue);
+      expect(stats.progress(key), (pages: 32, complete: false));
+      expect(stats.metrics(key).imageLabel, '45+');
+      expect(HistoryManager().findSync('h0')!.page, 3);
+    }
+    expect(
+        (stats.exportData({key})['progress'] as List).map(
+            (row) => (row['chapter_id'], row['furthest_page'])),
+        unorderedEquals([('a', 25), ('b', 7)]));
   });
 }

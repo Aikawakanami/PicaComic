@@ -38,6 +38,10 @@ void main() {
     var now = 0;
     final data =
         JmReadingData('Neutral', '42', ['chapter-a', 'chapter-b'], ['A', 'B']);
+    store.recordChapter(data.statisticsIdentity, 'chapter-a', 2,
+        catalog: data.statisticsCatalog);
+    store.recordChapter(data.statisticsIdentity, 'chapter-b', 1,
+        catalog: data.statisticsCatalog);
     final logic = ComicReadingPageLogic(1, data, 1, () {});
     final tracker = ReadingSessionTracker(
         store: store,
@@ -67,6 +71,7 @@ void main() {
     now += 20000;
     tracker.checkpoint();
     expect(store.metrics(data.statisticsIdentity).elapsedMs, 0);
+    expect(store.progress(data.statisticsIdentity), isNull);
     final adjacent = _ControlledImage();
     logic.observeImage(2, adjacent, context);
     adjacent.succeed();
@@ -74,6 +79,7 @@ void main() {
     now += 20000;
     tracker.checkpoint();
     expect(store.metrics(data.statisticsIdentity).elapsedMs, 0);
+    expect(store.progress(data.statisticsIdentity), isNull);
     final current = _ControlledImage();
     logic.observeImage(1, current, context);
     current.succeed();
@@ -92,6 +98,7 @@ void main() {
     now += 20000;
     tracker.checkpoint();
     expect(store.metrics(data.statisticsIdentity).elapsedMs, 11000);
+    expect(store.progress(data.statisticsIdentity), (pages: 1, complete: false));
     final next = _ControlledImage();
     logic.observeImage(1, next, context);
     next.succeed();
@@ -101,6 +108,7 @@ void main() {
     expect(store.metrics(data.statisticsIdentity).count, 1);
     expect(store.metrics(data.statisticsIdentity).elapsedMs, 15000);
     expect(logic.hasReadContent, true);
+    expect(store.progress(data.statisticsIdentity), (pages: 2, complete: false));
   });
 
   test(

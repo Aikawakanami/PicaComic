@@ -1,5 +1,6 @@
 import 'package:pica_comic/foundation/reading_metadata.dart';
 import 'package:pica_comic/foundation/reading_image_count.dart';
+import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:flutter_reorderable_grid_view/widgets/reorderable_builder.dart';
 import 'package:pica_comic/base.dart';
 import 'package:pica_comic/foundation/history.dart';
@@ -892,6 +893,34 @@ class LocalFavoriteTile extends ComicTile {
 
   @override
   String? get unreadImageCountLabel => comic.metrics.images == null ? null : comic.metrics.imageLabel;
+
+  @override
+  bool get showLegacyCompletion => false;
+
+  @override
+  ({int page, String total, bool complete})? readingProgressBadge(
+      History? history) {
+    final progress = ReadingStatistics.instance.progress(
+        (comic.type.sourceKey, comic.target));
+    final metrics = comic.metrics;
+    final total = metrics.images;
+    if (progress == null) {
+      if (history != null && history.page > 0 && history.page == history.maxPage &&
+          history.page == total && metrics.imagesComplete &&
+          singleChapterFavorite(comic.type.key)) {
+        return (page: history.page, total: metrics.imageLabel, complete: true);
+      }
+      return null;
+    }
+    return (
+      page: progress.pages,
+      total: total == null || total < progress.pages
+          ? '${progress.pages}+'
+          : metrics.imageLabel,
+      complete:
+          metrics.imagesComplete && progress.complete && progress.pages == total,
+    );
+  }
 
   void editTags() {
     showDialog(

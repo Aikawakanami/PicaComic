@@ -124,11 +124,22 @@ class ComicReadingPageLogic extends StateController {
   }
 
   void _updateReadingActivity() {
-    final decoded = _decodedPages.contains(index) ||
-        (readingMethod.isTwoPage && _decodedPages.contains(index+1));
-    final active = _readingVisible && !isLoading && errorMessage == null &&
-        index >= 1 && index <= urls.length && decoded;
-    if (active) hasReadContent = true;
+    int? displayedPage;
+    if (_readingVisible && !isLoading && errorMessage == null &&
+        index >= 1 && index <= urls.length) {
+      if (_decodedPages.contains(index)) displayedPage = index;
+      final startsSpread = singlePageForFirstScreen ? index.isEven : index.isOdd;
+      if (readingMethod.isTwoPage && startsSpread && index < urls.length &&
+          _decodedPages.contains(index + 1)) {
+        displayedPage = index + 1;
+      }
+    }
+    final active = displayedPage != null;
+    if (displayedPage != null) {
+      hasReadContent = true;
+      statisticsSession?.observeChapterPage(
+          data.statisticsChapter(order), displayedPage);
+    }
     statisticsSession?.setActive(active);
   }
 

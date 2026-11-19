@@ -45,6 +45,9 @@ abstract class ComicTile extends StatelessWidget {
   bool matchesReadingHistory(History history) => true;
   bool get showUnreadImageCount => false;
   String? get unreadImageCountLabel => null;
+  ({int page, String total, bool complete})? readingProgressBadge(
+      History? history) => null;
+  bool get showLegacyCompletion => true;
 
   bool get showFavorite => true;
 
@@ -347,11 +350,52 @@ abstract class ComicTile extends StatelessWidget {
     if (history?.page == 0 && !showUnreadImageCount) {
       history!.page = 1;
     }
-    final hasProgress = history != null && (!showUnreadImageCount || history.page > 0);
-    final imageCount = showUnreadImageCount && !hasProgress ? unreadImageCountLabel : null;
+    final progress = appdata.settings[73] == '1'
+        ? readingProgressBadge(history)
+        : null;
+    final hasHistory =
+        history != null && (!showUnreadImageCount || history.page > 0);
+    final imageCount = showUnreadImageCount && !hasHistory && progress == null
+        ? unreadImageCountLabel
+        : null;
+    final int? page = progress?.page ?? (hasHistory ? history.page : null);
+    final total = progress?.total ??
+        (hasHistory ? history.maxPage?.toString() : imageCount);
+    final complete = progress?.complete ??
+        (hasHistory && showLegacyCompletion && history.page == history.maxPage);
+    final showCompletedTotal = progress?.complete == true && total != null;
+    final showCheckInFavorite = isFavorite && showCompletedTotal;
+    final progressLabel = complete
+        ? '$total，${"已读完".tl}'
+        : page == null
+            ? total
+            : total == null
+                ? '$page'
+                : '$page/$total';
 
-    if (!isFavorite && !hasProgress && imageCount == null) {
-      return child;
+    if (!isFavorite && progressLabel == null) return child;
+
+    Widget readingBadgeCell({
+      int? page,
+      String? total,
+      bool complete = false,
+      Color? background,
+      Key? paintKey,
+    }) {
+      return Container(
+        width: 24,
+        height: 24,
+        color: background ?? Colors.blue.withValues(alpha: 0.9),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: CustomPaint(
+          key: paintKey,
+          painter: _ReadingHistoryPainter(
+            page: page,
+            total: total,
+            complete: complete,
+          ),
+        ),
+      );
     }
 
     return Stack(
@@ -370,7 +414,9 @@ abstract class ComicTile extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Row(
               children: [
-                if (isFavorite)
+                if (showCheckInFavorite)
+                  readingBadgeCell(complete: true, background: Colors.green)
+                else if (isFavorite)
                   Container(
                     height: 24,
                     width: 24,
@@ -381,25 +427,25 @@ abstract class ComicTile extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
-                if (hasProgress)
-                  Container(
-                    height: 24,
-                    color: Colors.blue.withOpacity(0.9),
-                    constraints: const BoxConstraints(minWidth: 24),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Semantics(label:history.maxPage == null ? '${history.page}' : '${history.page}/${history.maxPage}',
-                      child:CustomPaint(
-                      painter:
-                          _ReadingHistoryPainter(history.page, history.maxPage),
-                    )),
+                if (progressLabel != null)
+                  Semantics(
+                    label: progressLabel,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (showCompletedTotal) readingBadgeCell(total: total),
+                        if (!showCheckInFavorite)
+                          readingBadgeCell(
+                            page: page,
+                            total: total,
+                            complete: complete,
+                            paintKey: imageCount == null
+                                ? null
+                                : ValueKey('unread-image-count-$comicID'),
+                          ),
+                      ],
+                    ),
                   ),
-                if(imageCount != null) Container(
-                  height:24,alignment:Alignment.center,
-                  color:Colors.blue.withValues(alpha:0.9),
-                  constraints:const BoxConstraints(minWidth:24),
-                  padding:const EdgeInsets.symmetric(horizontal:4),
-                  child:Text(imageCount,key:ValueKey('unread-image-count-$comicID'),
-                    style:const TextStyle(fontSize:12,color:Colors.white))),
               ],
             ),
           ),
@@ -638,78 +684,81 @@ class _ComicDescription extends StatelessWidget {
 }
 
 class _ReadingHistoryPainter extends CustomPainter {
-  final int page;
-  final int? maxPage;
+  const _ReadingHistoryPainter({
+    required this.page,
+    required this.total,
+    required this.complete,
+  });
 
-  const _ReadingHistoryPainter(this.page, this.maxPage);
+  final int? page;
+  final String? total;
+  final bool complete;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (maxPage == null) {
-      // 在中央绘制page
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: "$page",
-          style: TextStyle(
-            fontSize: size.width * 0.8,
-            color: Colors.white,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(
-          canvas,
-          Offset((size.width - textPainter.width) / 2,
-              (size.height - textPainter.height) / 2));
-    } else if (page == maxPage) {
-      // 在中央绘制勾
+    if (complete) {
       final paint = Paint()
         ..color = Colors.white
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke;
-      canvas.drawLine(Offset(size.width * 0.2, size.height * 0.5),
-          Offset(size.width * 0.45, size.height * 0.75), paint);
-      canvas.drawLine(Offset(size.width * 0.45, size.height * 0.75),
-          Offset(size.width * 0.85, size.height * 0.3), paint);
-    } else {
-      // 在左上角绘制page, 在右下角绘制maxPage
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: "$page",
-          style: TextStyle(
-            fontSize: size.width * 0.8,
-            color: Colors.white,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, const Offset(0, 0));
-      final textPainter2 = TextPainter(
-        text: TextSpan(
-          text: "/$maxPage",
-          style: TextStyle(
-            fontSize: size.width * 0.5,
-            color: Colors.white,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter2.layout();
-      textPainter2.paint(
-          canvas,
-          Offset(size.width - textPainter2.width,
-              size.height - textPainter2.height));
+      final joint = Offset(size.width * 0.45, size.height * 0.75);
+      canvas.drawLine(Offset(size.width * 0.2, size.height * 0.5), joint, paint);
+      canvas.drawLine(joint, Offset(size.width * 0.85, size.height * 0.3), paint);
+      return;
+    }
+
+    final number = page;
+    final count = total;
+    final largeSize = size.width * 0.8;
+    if (number == null) {
+      if (count != null) {
+        _paintText(canvas, size, count, largeSize, Alignment.center,
+            fitWidth: true);
+      }
+      return;
+    }
+
+    _paintText(canvas, size, '$number', largeSize,
+        count == null ? Alignment.center : Alignment.topLeft);
+    if (count != null) {
+      _paintText(canvas, size, '/$count', size.width * 0.5, Alignment.bottomRight,
+          fitWidth: count.endsWith('+'));
     }
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return oldDelegate is! _ReadingHistoryPainter ||
-        oldDelegate.page != page ||
-        oldDelegate.maxPage != maxPage;
+  void _paintText(Canvas canvas, Size area, String text, double fontSize,
+      Alignment alignment, {bool fitWidth = false}) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: fontSize,
+          color: Colors.white,
+        ),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (fitWidth && painter.width > area.width) {
+      final scale = area.width / painter.width;
+      final bounds = alignment.inscribe(painter.size * scale, Offset.zero & area);
+      canvas.save();
+      canvas.translate(bounds.left, bounds.top);
+      canvas.scale(scale);
+      painter.paint(canvas, Offset.zero);
+      canvas.restore();
+    } else {
+      final bounds = alignment.inscribe(painter.size, Offset.zero & area);
+      painter.paint(canvas, bounds.topLeft);
+    }
+    painter.dispose();
   }
+
+  @override
+  bool shouldRepaint(covariant _ReadingHistoryPainter oldDelegate) =>
+      oldDelegate.page != page ||
+      oldDelegate.total != total ||
+      oldDelegate.complete != complete;
 }
 
 class NormalComicTile extends ComicTile {

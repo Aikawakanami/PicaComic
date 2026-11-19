@@ -8,6 +8,9 @@ import 'app.dart';
 import 'reading_image_count.dart';
 
 typedef ReadingIdentity = (String, String);
+typedef ReadingProgress = ({int pages, bool complete});
+
+const _statisticsSchemaVersion = 2;
 
 class ReadingMetrics {
   const ReadingMetrics(
@@ -37,7 +40,7 @@ class ReadingStatistics {
 
   ReadingStatistics.open(this.path, {this.historyPath})
       : db = sqlite3.open(path) {
-    if (db.select('PRAGMA user_version').first[0] > 1) {
+    if (db.select('PRAGMA user_version').first[0] > _statisticsSchemaVersion) {
       db.dispose();
       throw const FormatException('Unsupported statistics database');
     }
@@ -58,7 +61,11 @@ class ReadingStatistics {
     db.execute('''CREATE TABLE IF NOT EXISTS image_chapters (
       source_key TEXT, comic_id TEXT, chapter_id TEXT, pages INTEGER NOT NULL CHECK(pages >= 0),
       updated_at INTEGER NOT NULL, PRIMARY KEY(source_key,comic_id,chapter_id))''');
-    db.execute('PRAGMA user_version = 1');
+    db.execute('''CREATE TABLE IF NOT EXISTS chapter_progress (
+      source_key TEXT NOT NULL, comic_id TEXT NOT NULL, chapter_id TEXT NOT NULL,
+      furthest_page INTEGER NOT NULL CHECK(furthest_page > 0),
+      PRIMARY KEY(source_key,comic_id,chapter_id))''');
+    db.execute('PRAGMA user_version = $_statisticsSchemaVersion');
   }
 
   final String path;
@@ -239,6 +246,55 @@ class ReadingStatistics {
         [count, complete ? 1 : 0, key.$1, key.$2]);
   }
 
+  void recordProgress(ReadingIdentity key, Map<String, int> pages) {
+    if (pages.isEmpty) return;
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      for (final entry in pages.entries) {
+        _saveProgress(key, entry.key, entry.value);
+      }
+      db.execute('COMMIT');
+      revision++;
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  void _saveProgress(ReadingIdentity key, String chapter, int page) {
+    if (key.$1.isEmpty || key.$2.isEmpty || chapter.isEmpty || page <= 0) {
+      throw const FormatException('Invalid chapter progress');
+    }
+    db.execute('''INSERT INTO chapter_progress VALUES (?,?,?,?)
+      ON CONFLICT(source_key,comic_id,chapter_id) DO UPDATE SET
+        furthest_page=excluded.furthest_page
+      WHERE excluded.furthest_page > chapter_progress.furthest_page''',
+        [key.$1, key.$2, chapter, page]);
+  }
+
+  ReadingProgress? progress(ReadingIdentity key) {
+    final rows = db.select('''SELECT p.chapter_id,p.furthest_page,c.pages,b.chapter_ids
+      FROM chapter_progress p
+      JOIN image_chapters c USING (source_key,comic_id,chapter_id)
+      JOIN image_books b USING (source_key,comic_id)
+      WHERE p.source_key=? AND p.comic_id=?''', [key.$1, key.$2]);
+    if (rows.isEmpty) return null;
+    final encoded = rows.first['chapter_ids'] as String?;
+    final catalog = encoded == null ? null : Set<String>.from(jsonDecode(encoded));
+    var pageCount = 0;
+    var finished = 0;
+    for (final row in rows) {
+      if (catalog != null && !catalog.contains(row['chapter_id'])) continue;
+      final length = row['pages'] as int;
+      if (length <= 0) continue;
+      final page = min(length, row['furthest_page'] as int);
+      pageCount += page;
+      if (page == length) finished++;
+    }
+    if (pageCount == 0) return null;
+    return (pages: pageCount, complete: catalog != null && finished == catalog.length);
+  }
+
   Map<String, dynamic> exportData([Set<ReadingIdentity>? keys]) {
     List<Map<String, dynamic>> rows(String table) => db
         .select('SELECT * FROM $table')
@@ -252,7 +308,8 @@ class ReadingStatistics {
       'version': 1,
       'sessions': rows('reading_sessions'),
       'books': rows('image_books'),
-      'chapters': rows('image_chapters')
+      'chapters': rows('image_chapters'),
+      'progress': rows('chapter_progress')
     };
   }
 
@@ -308,6 +365,10 @@ class ReadingStatistics {
         ]);
         keys.add(key);
       }
+      for (final row in (data['progress'] as List? ?? const [])) {
+        _saveProgress((row['source_key'] as String, row['comic_id'] as String),
+            row['chapter_id'] as String, row['furthest_page'] as int);
+      }
       for (final key in keys) {
         _total(key);
         _images(key);
@@ -327,7 +388,8 @@ class ReadingStatistics {
         'reading_sessions',
         'comic_totals',
         'image_books',
-        'image_chapters'
+        'image_chapters',
+        'chapter_progress'
       ]) {
         db.execute('DELETE FROM $table');
       }
@@ -371,8 +433,13 @@ void validateReadingStatistics(String path) {
     }.entries) {
       input.select('SELECT ${entry.value} FROM ${entry.key} LIMIT 0');
     }
-    if (input.select('PRAGMA user_version').first[0] != 1) {
+    final version = input.select('PRAGMA user_version').first[0];
+    if (version != 1 && version != _statisticsSchemaVersion) {
       throw const FormatException('Unsupported statistics database');
+    }
+    if (version == _statisticsSchemaVersion) {
+      input.select('SELECT source_key,comic_id,chapter_id,furthest_page '
+          'FROM chapter_progress LIMIT 0');
     }
   } finally {
     input.dispose();
@@ -392,7 +459,9 @@ void mergeReadingStatisticsFiles(String target, String source) {
       'version': 1,
       'sessions': rows('reading_sessions'),
       'books': rows('image_books'),
-      'chapters': rows('image_chapters')
+      'chapters': rows('image_chapters'),
+      if (input.select('PRAGMA user_version').first[0] == _statisticsSchemaVersion)
+        'progress': rows('chapter_progress')
     });
   } finally {
     input.dispose();
@@ -429,6 +498,8 @@ class ReadingSessionTracker {
   int _lastActiveWall = 0;
   bool _active = false;
   bool _closed = false;
+  final _reachedPages = <String, int>{};
+  final _pendingPages = <String, int>{};
   int get elapsedMs =>
       _elapsed + (_active && !_closed ? max(0, _clock() - _last) : 0);
   bool get counted => elapsedMs >= 10000;
@@ -451,14 +522,25 @@ class ReadingSessionTracker {
     if (!value) checkpoint();
   }
 
+  void observeChapterPage(String chapter, int page) {
+    if (_closed || page <= (_reachedPages[chapter] ?? 0)) return;
+    _reachedPages[chapter] = page;
+    _pendingPages[chapter] = page;
+  }
+
   void checkpoint() {
     if (_closed) return;
     _sample();
-    if (_elapsed == _savedElapsed) return;
     try {
-      store.checkpoint(sessionId, identity, _elapsed,
-          counted: _elapsed >= 10000, updatedAt: _lastActiveWall);
-      _savedElapsed = _elapsed;
+      if (_pendingPages.isNotEmpty) {
+        store.recordProgress(identity, _pendingPages);
+        _pendingPages.clear();
+      }
+      if (_elapsed != _savedElapsed) {
+        store.checkpoint(sessionId, identity, _elapsed,
+            counted: _elapsed >= 10000, updatedAt: _lastActiveWall);
+        _savedElapsed = _elapsed;
+      }
     } catch (error, stack) {
       if (onError == null) rethrow;
       onError!(error, stack);

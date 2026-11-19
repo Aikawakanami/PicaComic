@@ -18,18 +18,18 @@ extension ToolBar on ComicReadingPage {
             text = "P${logic.index}";
           }
 
-          Widget child = SizedBox(
-            height: 105 + MediaQuery.of(context).padding.bottom,
+          Widget child = SafeArea(
+            top: false,
+            minimum: const EdgeInsets.symmetric(horizontal: 8),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(
                   height: 8,
                 ),
                 Row(
                   children: [
-                    const SizedBox(
-                      width: 8,
-                    ),
                     IconButton.filledTonal(
                         onPressed: () => !isReversed
                             ? logic.jumpToLastChapter()
@@ -43,26 +43,26 @@ extension ToolBar on ComicReadingPage {
                             ? logic.jumpToNextChapter()
                             : logic.jumpToLastChapter(),
                         icon: const Icon(Icons.last_page)),
-                    const SizedBox(
-                      width: 8,
-                    ),
                   ],
                 ),
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const SizedBox(
-                      width: 16,
-                    ),
                     Container(
-                      height: 24,
-                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+                      constraints: const BoxConstraints(minHeight: 24),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.tertiaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(text),
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
                     if (App.isWindows)
                       Tooltip(
                         message: "${"全屏".tl}(F12)",
@@ -206,11 +206,8 @@ extension ToolBar on ComicReadingPage {
                         onPressed: share,
                       ),
                     ),
-                    const SizedBox(
-                      width: 5,
-                    )
                   ],
-                )
+                ),
               ],
             ),
           );
