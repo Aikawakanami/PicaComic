@@ -22,9 +22,40 @@ String get pathSep => Platform.pathSeparator;
 var downloadManager = DownloadManager();
 
 class Appdata {
+  static const comicDetailSwipeSettingIndex = 97;
+
   ///搜索历史
-  List<String> searchHistory = [];
+  List<String> _searchHistory = [];
+  List<String> get searchHistory => _searchHistory;
+  final _searchSources = <String, List<String>>{};
   Set<String> favoriteTags = {};
+
+  List<String> searchSourcesFor(String keyword) =>
+      List.unmodifiable(_searchSources[keyword] ?? const <String>[]);
+
+  void recordSearch(String keyword, String sourceKey) {
+    keyword = keyword.trim();
+    if (keyword.isEmpty) return;
+
+    _searchHistory.remove(keyword);
+    _searchHistory.add(keyword);
+    final sources = _searchSources.putIfAbsent(keyword, () => []);
+    sources.remove(sourceKey);
+    sources.insert(0, sourceKey);
+    writeHistory();
+  }
+
+  void removeSearch(String keyword) {
+    _searchHistory.remove(keyword);
+    _searchSources.remove(keyword);
+    writeHistory();
+  }
+
+  void clearSearchHistory() {
+    _searchHistory.clear();
+    _searchSources.clear();
+    writeHistory();
+  }
 
   ///历史记录管理器, 可以通过factory构造函数访问, 也可以通过这里访问
   var history = HistoryManager();
@@ -128,6 +159,7 @@ class Appdata {
     "dash", //94 本地收藏最后阅读时间显示格式
     "hoursClock", //95 本地收藏阅读时长显示格式
     "1", //96 本地收藏角标跟随当前排序
+    "1", //97 详情页左右滑动切换漫画
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -136,14 +168,26 @@ class Appdata {
     "0", // 双页模式下第一页显示单页
     "0", // 点击关闭按钮时不显示提示
     webUA, // UA
+    "1", // 搜索页的历史搜索默认展开
+    "0", // 搜索页的收藏默认收起
   ];
+
+  bool get searchHistoryExpanded => implicitData[4] != '0';
+  set searchHistoryExpanded(bool expanded) {
+    implicitData[4] = expanded ? '1' : '0';
+  }
+
+  bool get searchFavoritesExpanded => implicitData[5] == '1';
+  set searchFavoritesExpanded(bool expanded) {
+    implicitData[5] = expanded ? '1' : '0';
+  }
 
   void writeImplicitData() async {
     var s = await SharedPreferences.getInstance();
     await s.setStringList("implicitData", implicitData);
   }
 
-  void readImplicitData() async {
+  Future<void> readImplicitData() async {
     var s = await SharedPreferences.getInstance();
     var data = s.getStringList("implicitData");
     if (data == null) {
@@ -214,10 +258,40 @@ class Appdata {
     await s.setStringList("firstUse", firstUse);
   }
 
-  void writeHistory() async {
-    var s = await SharedPreferences.getInstance();
-    await s.setStringList("search", searchHistory);
-    await s.setStringList("favoriteTags", favoriteTags.toList());
+  Future<void> writeHistory() async {
+    final s = await SharedPreferences.getInstance();
+    await Future.wait([
+      s.setStringList("search", _searchHistory.toList()),
+      s.setString("searchSources", jsonEncode(_searchSources)),
+      s.setStringList("favoriteTags", favoriteTags.toList()),
+    ]);
+  }
+
+  void _readSearchHistory(SharedPreferences preferences) {
+    final stored = preferences.getStringList("search") ?? [];
+    _searchHistory = stored.reversed
+        .map((keyword) => keyword.trim())
+        .where((keyword) => keyword.isNotEmpty)
+        .toSet()
+        .toList()
+        .reversed
+        .toList();
+    _searchSources.clear();
+    final encoded = preferences.get("searchSources");
+    if (encoded is! String) return;
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map<String, dynamic>) return;
+      for (final keyword in _searchHistory) {
+        final sources = decoded[keyword];
+        if (sources is List) {
+          _searchSources[keyword] =
+              sources.whereType<String>().toSet().toList();
+        }
+      }
+    } on FormatException {
+      // The old keyword-only history can still be read.
+    }
   }
 
   Future<void> writeData([bool sync = true]) async {
@@ -234,7 +308,7 @@ class Appdata {
     var s = await SharedPreferences.getInstance();
     try {
       await readSettings(s);
-      searchHistory = s.getStringList("search") ?? [];
+      _readSearchHistory(s);
       favoriteTags = (s.getStringList("favoriteTags") ?? []).toSet();
       blockingKeyword = s.getStringList("blockingKeyword") ?? [];
       if (s.getStringList("firstUse") != null) {
@@ -243,7 +317,7 @@ class Appdata {
           firstUse[i] = st[i];
         }
       }
-      readImplicitData();
+      await readImplicitData();
       return firstUse[3] == "1";
     } catch (e) {
       return false;
@@ -362,6 +436,9 @@ class _Settings {
   set browseSourcePagesPerPage(int value) {
     _settings[93] = value.toString();
   }
+
+  bool get comicDetailSwipeEnabled =>
+      _settings[Appdata.comicDetailSwipeSettingIndex] == '1';
 
   FavoriteReadDateFormat get favoriteReadDateFormat =>
       FavoriteReadDateFormat.values.asNameMap()[_settings[94]] ??

@@ -260,11 +260,7 @@ class ComicReadingPage extends StatelessWidget {
         ImageManager.clearTasks();
       }
       // 更新漫画详情页面
-      Future.microtask(() {
-        if (BaseComicPage.tagsStack.isNotEmpty) {
-          BaseComicPage.tagsStack.last.updateHistory(history);
-        }
-      });
+      Future.microtask(() => BaseComicPage.notifyReadingHistory(history));
       if (appdata.settings[76] != "0") {
         SystemChrome.setPreferredOrientations(DeviceOrientation.values);
       }

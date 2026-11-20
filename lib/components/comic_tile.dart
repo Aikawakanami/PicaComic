@@ -8,6 +8,22 @@ class ComicTileMenuOption {
   const ComicTileMenuOption(this.title, this.icon, this.onTap);
 }
 
+class ComicTileDetails extends InheritedWidget {
+  const ComicTileDetails({
+    super.key,
+    required this.open,
+    required super.child,
+  });
+
+  final VoidCallback open;
+
+  static VoidCallback? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ComicTileDetails>()?.open;
+
+  @override
+  bool updateShouldNotify(ComicTileDetails oldWidget) => open != oldWidget.open;
+}
+
 abstract class ComicTile extends StatelessWidget {
   /// Show a comic brief information. Usually displayed in comic list page.
   const ComicTile({Key? key}) : super(key: key);
@@ -63,14 +79,16 @@ abstract class ComicTile extends StatelessWidget {
 
   void _onLongTap(BuildContext tileContext) {
     final selection = ComicSelectionScope.maybeOf(tileContext);
-    if (selection != null && favoriteItem != null) {
-      _showLongTapMenu(selection);
+    final openDetails = ComicTileDetails.of(tileContext);
+    if ((selection != null && favoriteItem != null) || openDetails != null) {
+      _showLongTapMenu(selection, openDetails: openDetails);
     } else {
       onLongTap_();
     }
   }
 
-  void _showLongTapMenu(ComicSelectionController? selection) {
+  void _showLongTapMenu(ComicSelectionController? selection,
+      {VoidCallback? openDetails}) {
     bool favorite = false;
     showDialog(
       context: App.globalContext!,
@@ -101,7 +119,7 @@ abstract class ComicTile extends StatelessWidget {
                       title: Text("查看详情".tl),
                       onTap: () {
                         context.pop();
-                        onTap_();
+                        (openDetails ?? onTap_)();
                       },
                     ),
                     if (favoriteItem != null)
@@ -114,7 +132,7 @@ abstract class ComicTile extends StatelessWidget {
                           });
                         },
                       ),
-                    if (selection != null && favoriteItem != null)
+                    if (selection != null && !selection.active && favoriteItem != null)
                       ListTile(
                         leading: const Icon(Icons.checklist),
                         title: Text('多选'.tl),
@@ -275,7 +293,7 @@ abstract class ComicTile extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: selection.busy ? null : () => selection.toggle(comic),
-        onLongPress: selection.busy ? null : () => selection.toggle(comic),
+        onLongPress: selection.busy ? null : () => _onLongTap(context),
         child: AbsorbPointer(
           child: Stack(
             fit: StackFit.expand,
@@ -486,7 +504,7 @@ abstract class ComicTile extends StatelessWidget {
       final height = constrains.maxHeight - 16;
       return InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: onTap_,
+          onTap: ComicTileDetails.of(context) ?? onTap_,
           onLongPress: enableLongPressed ? () => _onLongTap(context) : null,
           onSecondaryTapDown: onSecondaryTap_,
           child: Padding(
@@ -576,7 +594,7 @@ abstract class ComicTile extends StatelessWidget {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: onTap_,
+                  onTap: ComicTileDetails.of(context) ?? onTap_,
                   onLongPress:
                       enableLongPressed ? () => _onLongTap(context) : null,
                   onSecondaryTapDown: onSecondaryTap_,
@@ -1021,7 +1039,7 @@ class CustomComicTile extends ComicTile {
 }
 
 Widget buildComicTile(BuildContext context, BaseComic item, String sourceKey,
-    {List<ComicTileMenuOption>? addonMenuOptions}) {
+    {List<ComicTileMenuOption>? addonMenuOptions, VoidCallback? openDetails}) {
   var source = ComicSource.find(sourceKey);
   if (source == null) {
     throw "Comic Source $sourceKey Not Found";
@@ -1053,16 +1071,30 @@ Widget buildComicTile(BuildContext context, BaseComic item, String sourceKey,
       );
     }
   }
-  if (source.comicTileBuilderOverride != null) {
-    return source.comicTileBuilderOverride!(
+  final tile = source.comicTileBuilderOverride != null
+    ? source.comicTileBuilderOverride!(
       context,
       item,
       addonMenuOptions,
-    );
-  } else {
-    return CustomComicTile(item as CustomComic,
-        addonMenuOptions: addonMenuOptions);
-  }
+    ) : CustomComicTile(item as CustomComic, addonMenuOptions: addonMenuOptions);
+  return openDetails == null
+      ? tile
+      : ComicTileDetails(open: openDetails, child: tile);
+}
+
+void openComicListDetails(List<BaseComic> comics, String sourceKey, int index) {
+  ComicDetailBrowser.open(
+    App.mainNavigatorKey!.currentContext!,
+    comics.map((comic) => isBlocked(comic) == null
+        ? (
+            sourceKey: comic is CustomComic ? comic.sourceKey : sourceKey,
+            id: comic.id,
+            cover: comic.cover,
+            title: comic.title,
+          )
+        : null),
+    index,
+  );
 }
 
 /// return the first blocked keyword, or null if not blocked

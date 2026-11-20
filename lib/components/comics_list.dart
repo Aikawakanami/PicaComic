@@ -395,7 +395,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                         if (i == comics.length - 1) {
                           logic.loadNextPage(getComics);
                         }
-                        return buildItem(context, comics[i]);
+                        return buildItem(context, comics, i);
                       }),
                       gridDelegate: SliverGridDelegateWithComics(),
                     ),
@@ -461,7 +461,7 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
                     SliverGrid(
                       delegate: SliverChildBuilderDelegate(
                           childCount: comics.length, (context, i) {
-                        return buildItem(context, comics[i]);
+                        return buildItem(context, comics, i);
                       }),
                       gridDelegate: SliverGridDelegateWithComics(),
                     ),
@@ -777,8 +777,14 @@ abstract class ComicsPage<T extends BaseComic> extends StatelessWidget {
     );
   }
 
-  Widget buildItem(BuildContext context, T item) {
-    return buildComicTile(context, item, sourceKey, addonMenuOptions: addonMenuOptions);
+  Widget buildItem(BuildContext context, List<T> comics, int index) {
+    return buildComicTile(
+      context,
+      comics[index],
+      sourceKey,
+      addonMenuOptions: addonMenuOptions,
+      openDetails: () => openComicListDetails(comics, sourceKey, index),
+    );
   }
 }
 
@@ -844,7 +850,12 @@ class _SliverGridComics extends StatelessWidget {
           if (index == comics.length - 1) {
             onLastItemBuild?.call();
           }
-          return buildComicTile(context, comics[index], sourceKey);
+          return buildComicTile(
+            context,
+            comics[index],
+            sourceKey,
+            openDetails: () => openComicListDetails(comics, sourceKey, index),
+          );
         },
         childCount: comics.length,
       ),

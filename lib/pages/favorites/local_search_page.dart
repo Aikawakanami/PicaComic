@@ -125,11 +125,17 @@ class _LocalSearchPageState extends StateWithController<LocalSearchPage> {
               itemCount: comics.length,
               padding: EdgeInsets.zero,
               itemBuilder: (BuildContext context, int index) {
+                final visible = comics;
                 return LocalFavoriteTile(
-                  comics[index].comic,
-                  comics[index].folder,
+                  visible[index].comic,
+                  visible[index].folder,
                       () => setState(() {}),
                   true,
+                  openDetails: () => openLocalFavoriteDetails(
+                    context,
+                    visible.map((item) => item.comic),
+                    index,
+                  ),
                   showFolderInfo: true,
                 );
               },

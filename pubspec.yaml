@@ -142,6 +142,7 @@ flutter:
     - assets/translation.json
     - assets/init.js
     - assets/tags_tw.json
+    - assets/search_sources/
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/assets-and-images/#from-packages
 

@@ -49,6 +49,11 @@ Widget buildExploreSettings(BuildContext context, bool popUp) {
           MyApp.updater?.call();
         },
       ),
+      SwitchSetting(
+        title: "详情页左右滑动切换漫画".tl,
+        settingsIndex: Appdata.comicDetailSwipeSettingIndex,
+        icon: const Icon(Icons.swipe),
+      ),
       NewPageSetting(
           title: "关键词屏蔽".tl,
           onTap: () => showPopUpWidget(context,

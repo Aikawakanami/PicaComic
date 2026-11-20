@@ -37,7 +37,11 @@ class _SearchPageComicList extends ComicsPage<BaseComic> {
 
   @override
   Future<Res<List<BaseComic>>> getComics(int i) async {
-    var loader = ComicSource.find(sourceKey)!.searchPageData!.loadPage!;
+    final source = ComicSource.find(sourceKey)!;
+    if (i == 1 && !source.isBuiltIn) {
+      appdata.recordSearch(keyword, sourceKey);
+    }
+    final loader = source.searchPageData!.loadPage!;
     return await loader(keyword, i, options);
   }
 

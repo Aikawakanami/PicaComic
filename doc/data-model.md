@@ -33,7 +33,7 @@
 | 位置 | 内容及主要约束 | 当前源码锚点 |
 | --- | --- | --- |
 | dataPath 下 `settings` | JSON 字符串列表；读取优先于旧 SharedPreferences 的 `settings`，按现有列表长度拷贝，缺失尾项沿用默认值 | `lib/base.dart → Appdata.settings / readSettings / updateSettings` |
-| SharedPreferences | `search`、`favoriteTags`、`blockingKeyword`、`firstUse`、`implicitData` 等；`implicitData` 被明确排除出同步模型 | `lib/base.dart → readData / writeHistory / readImplicitData / toJson` |
+| SharedPreferences | `search`、`searchSources`、`favoriteTags`、`blockingKeyword`、`firstUse`、`implicitData` 等；搜索历史和 `implicitData` 为本机数据 | `lib/base.dart → readData / writeHistory / readImplicitData / toJson` |
 | `comic_source/<key>.data`、`comic_source/*.js` | 源状态 JSON 与用户安装的脚本；状态可能包含账户信息 | `lib/comic_source/comic_source.dart → loadData / saveData / init`；`parser.dart → _loadAccountConfig` |
 | `history.db → history` | `target TEXT PRIMARY KEY`；另含 title、subtitle、cover、time、type、ep、page、readEpisode、max_page。`readEpisode` 写成逗号分隔字符串 | `lib/foundation/history.dart → init / addHistory / saveReadHistory` |
 | `history.db → image_favorites` | 主键 `(id, ep, page)`；title、cover、other 等，`other` 是 JSON；与历史共用数据库 | `lib/foundation/image_favorites.dart → ImageFavoriteManager.init / add` |

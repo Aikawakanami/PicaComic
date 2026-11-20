@@ -26,6 +26,7 @@ class Flyout extends StatefulWidget {
       this.withInkWell = false,
       this.borderRadius = 0,
       this.controller,
+      this.onShow,
       this.navigator});
 
   final WidgetBuilder flyoutBuilder;
@@ -47,6 +48,8 @@ class Flyout extends StatefulWidget {
   final NavigatorState? navigator;
 
   final FlyoutController? controller;
+
+  final VoidCallback? onShow;
 
   @override
   State<Flyout> createState() => _FlyoutState();
@@ -94,6 +97,7 @@ class _FlyoutState extends State<Flyout> {
     var renderBox = context.findRenderObject() as RenderBox;
     var rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
     var navigator = widget.navigator ?? Navigator.of(context);
+    widget.onShow?.call();
     navigator.push(PageRouteBuilder(
         fullscreenDialog: true,
         barrierDismissible: true,

@@ -278,13 +278,11 @@ class PicacgNetwork {
   Future<Res<List<ComicItemBrief>>> search(
       String keyWord, String sort, int page,
       {bool addToHistory = false}) async {
+    if (page == 1 && addToHistory) {
+      appdata.recordSearch(keyWord, "picacg");
+    }
     var response = await post('$apiUrl/comics/advanced-search?page=$page',
         {"keyword": keyWord, "sort": sort});
-    if (page == 1 && addToHistory && keyWord != "") {
-      appdata.searchHistory.remove(keyWord);
-      appdata.searchHistory.add(keyWord);
-      appdata.writeHistory();
-    }
     if (response.error) {
       return Res(null, errorMessage: response.errorMessage);
     }

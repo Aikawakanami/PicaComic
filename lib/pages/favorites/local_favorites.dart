@@ -4,6 +4,7 @@ import 'package:pica_comic/foundation/reading_stats.dart';
 import 'package:pica_comic/foundation/favorite_query.dart';
 import 'package:flutter_reorderable_grid_view/widgets/reorderable_builder.dart';
 import 'package:pica_comic/base.dart';
+import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/foundation/history.dart';
 import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/network/download.dart';
@@ -338,6 +339,7 @@ class LocalFavoriteTile extends ComicTile {
       this.sort = FavoriteSort.manual,
       this.onLongPressed,
       this.onTap,
+      this.openDetails,
       super.key});
 
   final FavoriteItem comic;
@@ -348,6 +350,7 @@ class LocalFavoriteTile extends ComicTile {
 
   /// return true to disable default action
   final bool Function()? onTap;
+  final VoidCallback? openDetails;
 
   final bool _enableLongPressed;
 
@@ -462,6 +465,10 @@ class LocalFavoriteTile extends ComicTile {
   BuildContext get context => App.mainNavigatorKey!.currentContext!;
 
   void showInfo() {
+    if (openDetails != null) {
+      openDetails!();
+      return;
+    }
     context.to(
       () => ComicPage(
           sourceKey: comic.type.comicSource.key,
@@ -1054,6 +1061,27 @@ class LocalFavoriteTile extends ComicTile {
           );
         });
   }
+}
+
+void openLocalFavoriteDetails(
+  BuildContext context,
+  Iterable<FavoriteItem> comics,
+  int index,
+) {
+  ComicDetailBrowser.open(
+    context,
+    comics.map((comic) {
+      final source = ComicSource.find(comic.type.sourceKey);
+      if (!comic.available || source == null) return null;
+      return (
+        sourceKey: source.key,
+        id: comic.target,
+        cover: comic.coverPath,
+        title: comic.name,
+      );
+    }),
+    index,
+  );
 }
 
 void copyAllTo(String source, List<FavoriteItem> comics) {

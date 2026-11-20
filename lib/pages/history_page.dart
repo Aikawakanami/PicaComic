@@ -198,7 +198,24 @@ class _HistoryPageState extends State<HistoryPage> {
           coverImage: StreamImageProvider.comicCover(
               comic.path, comics_[i].type.comicSource?.key),
           onTap: () {
-            toComicPageWithHistory(context, comics_[i]);
+            if (comics_[i].type.comicSource == null) {
+              toComicPageWithHistory(context, comics_[i]);
+              return;
+            }
+            ComicDetailBrowser.open(
+              context,
+              comics_.map((history) {
+                final source = history.type.comicSource;
+                if (source == null) return null;
+                return (
+                  sourceKey: source.key,
+                  id: history.target,
+                  cover: history.cover,
+                  title: history.title,
+                );
+              }),
+              i,
+            );
           },
         );
       }),

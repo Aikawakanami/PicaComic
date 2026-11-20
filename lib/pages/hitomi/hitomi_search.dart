@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/network/hitomi_network/hitomi_main_network.dart';
 import 'package:pica_comic/network/hitomi_network/hitomi_models.dart';
+import 'package:pica_comic/pages/comic_page.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 
 import '../../foundation/app.dart';
@@ -30,7 +31,10 @@ class _SearchPageComicListState
         widget.head,
         SliverGrid(
           delegate: SliverChildBuilderDelegate(
-            (context, index) => HitomiComicTileDynamicLoading(data[index]),
+            (context, index) => HitomiComicTileDynamicLoading(
+              data[index],
+              detailIds: data,
+            ),
             childCount: data.length,
           ),
           gridDelegate: SliverGridDelegateWithComics(),
@@ -121,11 +125,12 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
 
 class HitomiComicTileDynamicLoading extends StatefulWidget {
   const HitomiComicTileDynamicLoading(this.id,
-      {Key? key, this.addonMenuOptions})
+      {Key? key, this.addonMenuOptions, this.detailIds})
       : super(key: key);
   final int id;
 
   final List<ComicTileMenuOption>? addonMenuOptions;
+  final List<int>? detailIds;
 
   @override
   State<HitomiComicTileDynamicLoading> createState() =>
@@ -169,7 +174,37 @@ class _HitomiComicTileDynamicLoadingState
 
       return buildLoadingWidget();
     } else {
-      return buildComicTile(context, comic!, 'hitomi');
+      final ids = widget.detailIds;
+      return buildComicTile(
+        context,
+        comic!,
+        'hitomi',
+        addonMenuOptions: widget.addonMenuOptions,
+        openDetails: ids == null
+            ? null
+            : () {
+                final byId = {
+                  for (final item in cache)
+                    int.tryParse(
+                      RegExp(r'\d+(?=\.html)').firstMatch(item.link)?[0] ?? '',
+                    ): item,
+                };
+                ComicDetailBrowser.open(
+                  context,
+                  ids.map((id) {
+                    final item = byId[id];
+                    if (item == null || isBlocked(item) != null) return null;
+                    return (
+                      sourceKey: 'hitomi',
+                      id: item.link,
+                      cover: item.cover,
+                      title: item.title,
+                    );
+                  }),
+                  ids.indexOf(widget.id),
+                );
+              },
+      );
     }
   }
 

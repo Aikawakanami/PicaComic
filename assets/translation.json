@@ -1,5 +1,10 @@
 {
   "zh_TW": {
+    "添加搜索收藏": "新增搜尋收藏",
+    "手动输入": "手動輸入",
+    "从历史选择": "從歷史選擇",
+    "搜索词": "搜尋詞",
+    "要清空所有漫画源的收藏吗?": "要清空所有漫畫源的收藏嗎？",
     "未获取": "未取得",
     "手动顺序": "手動順序",
     "最后阅读时间": "最後閱讀時間",
@@ -281,6 +286,7 @@
     "显示头像框": "顯示頭像框",
     "漫画列表显示方式": "漫畫列表顯示方式",
     "分页容量": "分頁容量",
+    "详情页左右滑动切换漫画": "詳情頁左右滑動切換漫畫",
     "源页加载失败": "來源頁面載入失敗",
     "绅士漫画": "紳士漫畫",
     "自动打卡": "自動打卡",
@@ -611,6 +617,11 @@
     "请勿反馈相关问题": "請勿回饋相關問題"
   },
   "en_US": {
+    "添加搜索收藏": "Add search favorite",
+    "手动输入": "Enter manually",
+    "从历史选择": "Choose from history",
+    "搜索词": "Search term",
+    "要清空所有漫画源的收藏吗?": "Clear favorites for all comic sources?",
     "未获取": "Unknown",
     "手动顺序": "Manual order",
     "最后阅读时间": "Last read",
@@ -891,6 +902,7 @@
     "显示头像框": "Display avatar frame",
     "漫画列表显示方式": "Comic list display mode",
     "分页容量": "Page capacity",
+    "详情页左右滑动切换漫画": "Swipe between comics on the details page",
     "源页加载失败": "Couldn't load a source page",
     "自动打卡": "Auto check-in",
     "初始页面": "Initial page",

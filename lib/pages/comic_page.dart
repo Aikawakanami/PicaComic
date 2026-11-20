@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection' show IterableExtensions;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +18,6 @@ import 'package:pica_comic/foundation/image_loader/stream_image_provider.dart';
 import 'package:pica_comic/foundation/image_manager.dart';
 import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/foundation/log.dart';
-import 'package:pica_comic/foundation/stack.dart' as stack;
 import 'package:pica_comic/foundation/ui_mode.dart';
 import 'package:pica_comic/network/base_comic.dart';
 import 'package:pica_comic/network/download.dart';
@@ -31,6 +31,125 @@ import 'show_image_page.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'dart:math' as math;
+
+typedef ComicDetailEntry = ({
+  String sourceKey,
+  String id,
+  String? cover,
+  String title,
+});
+
+class ComicDetailBrowser extends StatefulWidget {
+  const ComicDetailBrowser._(this.entries, this.initialIndex);
+
+  static void open(
+    BuildContext context,
+    Iterable<ComicDetailEntry?> items,
+    int initialIndex,
+  ) {
+    if (initialIndex < 0) return;
+    if (!appdata.appSettings.comicDetailSwipeEnabled) {
+      final entry = items.elementAtOrNull(initialIndex);
+      if (entry != null) {
+        context.to(() => ComicPage(
+          sourceKey: entry.sourceKey,
+          id: entry.id,
+          cover: entry.cover,
+        ));
+      }
+      return;
+    }
+
+    final entries = <ComicDetailEntry>[];
+    var index = -1;
+    var position = 0;
+    for (final entry in items) {
+      if (entry != null) {
+        if (position == initialIndex) index = entries.length;
+        entries.add(entry);
+      }
+      position++;
+    }
+    if (index == -1) return;
+    context.to(() => ComicDetailBrowser._(entries, index));
+  }
+
+  final List<ComicDetailEntry> entries;
+  final int initialIndex;
+
+  @override
+  State<ComicDetailBrowser> createState() => _ComicDetailBrowserState();
+}
+
+class _ComicDetailBrowserState extends State<ComicDetailBrowser> {
+  late int _settledIndex = widget.initialIndex;
+  late final _controller = PageController(initialPage: widget.initialIndex);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.entries.length == 1) {
+      final entry = widget.entries.single;
+      return ComicPage(
+          sourceKey: entry.sourceKey, id: entry.id, cover: entry.cover);
+    }
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0 && _controller.hasClients) {
+          final index = _controller.page?.round();
+          if (index != null && index != _settledIndex) {
+            setState(() => _settledIndex = index);
+          }
+        }
+        return false;
+      },
+      child: PageView.builder(
+        controller: _controller,
+        allowImplicitScrolling: true,
+        itemCount: widget.entries.length,
+        itemBuilder: (context, index) {
+          final entry = widget.entries[index];
+          final active = index == _settledIndex;
+          return _ComicDetailSlot(
+            active: active,
+            title: entry.title,
+            child: HeroMode(
+              enabled: active,
+              child: IgnorePointer(
+                ignoring: !active,
+                child: ComicPage(
+                  sourceKey: entry.sourceKey,
+                  id: entry.id,
+                  cover: entry.cover,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ComicDetailSlot extends InheritedWidget {
+  const _ComicDetailSlot({
+    required this.active,
+    required this.title,
+    required super.child,
+  });
+
+  final bool active;
+  final String title;
+
+  @override
+  bool updateShouldNotify(_ComicDetailSlot oldWidget) =>
+      active != oldWidget.active || title != oldWidget.title;
+}
 
 class ComicPage extends StatelessWidget {
   const ComicPage({
@@ -255,8 +374,7 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
   @override
   bool? get favoriteOnPlatformInitial => data?.isFavorite;
 
-  ComicPageLogic<ComicInfoData> get logic =>
-      StateController.find<ComicPageLogic<ComicInfoData>>(tag: tag);
+  ComicPageLogic<ComicInfoData> get logic => _logic;
 
   @override
   void openFavoritePanel() {
@@ -603,26 +721,50 @@ class ComicPageLogic<T extends Object> extends StateController {
   bool showFullEps = false;
   int colorIndex = 0;
   bool? favoriteOnPlatform;
+  bool _fetching = false;
+  bool _closed = false;
+  (String, String)? _historyKey;
 
   Future<void> get(Future<Res<T>> Function() loadData,
       Future<bool> Function(T) loadFavorite, String Function() getId,
       {String? sourceKey, String Function()? statisticsId}) async {
-    var [res, _] = await Future.wait(
-        [loadData(), Future.delayed(const Duration(milliseconds: 300))]);
-    if (res.error) {
-      message = res.errorMessage;
-      if (message == "Exit") {
-        loading = false;
-        return;
+    if (_fetching || _closed) return;
+    _fetching = true;
+    try {
+      var [res, _] = await Future.wait(
+          [loadData(), Future.delayed(const Duration(milliseconds: 300))]);
+      if (_closed) return;
+      if (res.error) {
+        message = res.errorMessage;
+      } else {
+        data = res.data;
+        final model = res.data;
+        final id = getId();
+        if (sourceKey != null) {
+          recordReadingMetadata(sourceKey, statisticsId?.call() ?? id, model);
+          _historyKey = (sourceKey, model is HistoryMixin ? model.target : id);
+        }
+        favorite = await loadFavorite(model);
+        if (_closed) return;
+        history = await HistoryManager().find(id);
       }
-    } else {
-      data = res.data;
-      if (sourceKey != null) recordReadingMetadata(sourceKey,statisticsId?.call() ?? getId(),res.data);
-      favorite = await loadFavorite(res.data);
+    } catch (error, trace) {
+      if (_closed) return;
+      LogManager.addLog(LogLevel.error, 'Comic detail', '$error\n$trace');
+      message = error.toString();
+    } finally {
+      _fetching = false;
     }
+    if (_closed) return;
     loading = false;
-    history = await HistoryManager().find(getId());
     update();
+  }
+
+  @override
+  void dispose() {
+    _closed = true;
+    controller.dispose();
+    super.dispose();
   }
 
   void refresh_() {
@@ -645,8 +787,18 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
   /// and allow user to download or read comic.
   const BaseComicPage({super.key});
 
+  static final _pageContexts = Expando<BuildContext>();
+
   ComicPageLogic<T> get _logic =>
-      StateController.find<ComicPageLogic<T>>(tag: tag);
+      StateController.find<ComicPageLogic<T>>(tag: _pageContexts[this]);
+
+  bool get isActiveDetail {
+    final page = _pageContexts[this];
+    if (page == null || !page.mounted) return false;
+    return page.getInheritedWidgetOfExactType<_ComicDetailSlot>()?.active !=
+            false &&
+        (ModalRoute.of(page)?.isCurrent ?? false);
+  }
 
   /// title
   String? get title;
@@ -661,10 +813,7 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
   @nonVirtual
   T? get data => _logic.data;
 
-  /// Used by StateController.
-  ///
-  /// This should be a unique identifier,
-  /// to prevent loading same data when user open more than one comic page.
+  /// Stable identifier for detail labels and cover transitions.
   String get tag;
 
   /// comic total page
@@ -779,28 +928,43 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
     }
   }
 
-  static stack.Stack<ComicPageLogic> tagsStack = stack.Stack<ComicPageLogic>();
+  static final _openDetails = <ComicPageLogic>{};
+
+  static void notifyReadingHistory(History? history) {
+    if (history == null) return;
+    final sourceKey = history.type.comicSource?.key;
+    for (final detail in _openDetails) {
+      if (detail._historyKey == (sourceKey, history.target)) {
+        detail.updateHistory(history);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    _pageContexts[this] = context;
+    final slot = context.dependOnInheritedWidgetOfExactType<_ComicDetailSlot>();
     return LayoutBuilder(builder: (context, constraints) {
       return Scaffold(
         body: StateBuilder<ComicPageLogic<T>>(
-          tag: tag,
+          tag: _pageContexts[this],
           init: ComicPageLogic<T>(),
           initState: (logic) {
-            tagsStack.push(_logic);
-            _logic.favoriteOnPlatform = favoriteOnPlatformInitial;
+            _openDetails.add(logic);
+            logic.favoriteOnPlatform = favoriteOnPlatformInitial;
           },
           dispose: (logic) {
-            tagsStack.pop();
+            _openDetails.remove(logic);
+            logic.dispose();
           },
           builder: (logic) {
             _logic.width = constraints.maxWidth;
             _logic.height = constraints.maxHeight;
             if (logic.loading) {
-              logic.get(loadData, loadFavorite, () => id, sourceKey: sourceKey,
-                statisticsId:()=>toLocalFavoriteItem().target);
+              if (slot?.active != false) {
+                logic.get(loadData, loadFavorite, () => id, sourceKey: sourceKey,
+                    statisticsId: () => toLocalFavoriteItem().target);
+              }
               return buildLoading(context);
             } else if (logic.message != null) {
               return NetworkError(
@@ -971,7 +1135,9 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
                     children: [
                       SizedBox(
                         width: double.infinity,
-                        child: SelectableText(title?.trim() ?? "",
+                        child: SelectableText(title?.trim() ??
+                            context.getInheritedWidgetOfExactType<_ComicDetailSlot>()?.title ??
+                            "",
                             style: const TextStyle(fontSize: 18)),
                       ),
                       const SizedBox(
@@ -1040,7 +1206,16 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
-      child: loading ? null : Hero(
+      child: loading
+          ? entryUrl == null ||
+                  context.getInheritedWidgetOfExactType<_ComicDetailSlot>() == null
+              ? null
+              : Image(
+                  image: StreamImageProvider.comicCover(entryUrl, sourceKey),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                )
+          : Hero(
         tag: heroTag,
         child: ComicDetailCover(
           entryUrl: entryUrl,

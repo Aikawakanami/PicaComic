@@ -70,6 +70,7 @@ class _FloatingSearchBarState extends State<_FloatingSearchBar> {
                 widget.onChanged?.call(s);
               },
               focusNode: widget.focusNode,
+              onTapOutside: (_) => widget.focusNode?.unfocus(),
               decoration: InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
@@ -91,8 +92,9 @@ class _FloatingSearchBarState extends State<_FloatingSearchBar> {
               iconSize: 18,
               onPressed: () {
                 setState(() {
-                  widget.controller.text = "";
+                  widget.controller.clear();
                 });
+                widget.onChanged?.call("");
               },
             ),
           ),
@@ -123,8 +125,6 @@ class PreSearchController extends StateController {
   String? language;
 
   bool limitHistory = true;
-  bool historyExpanded = true;
-  bool favoritesExpanded = true;
 
   void updateOptions() {
     for (var source in ComicSource.sources) {
@@ -173,8 +173,13 @@ class PreSearchPage extends StatelessWidget {
 
   void search([String? s, String? type]) {
     var keyword = (s ?? controller.text).trim();
+    final target = type ?? searchController.target;
+    final isCurrentSource = target == searchController.target;
+    if (ComicSource.find(target)?.searchPageData == null) return;
+    _focusNode.unfocus();
 
-    if (searchController.language != null &&
+    if (isCurrentSource &&
+        searchController.language != null &&
         searchController.searchPageData.enableLanguageFilter) {
       // 在添加语言筛选前，先移除掉可能存在的 language: 部分
       // 主要是为了解决强迫症
@@ -184,13 +189,13 @@ class PreSearchPage extends StatelessWidget {
     }
 
     var context = App.mainNavigatorKey!.currentContext!;
-    context.to(
+    context.to<void>(
       () => SearchResultPage(
         keyword: keyword,
-        sourceKey: type ?? searchController.target,
-        options: searchController.options,
+        sourceKey: target,
+        options: isCurrentSource ? searchController.options : const [],
       ),
-    );
+    ).then((_) => searchController.update(["history"]));
   }
 
   void findSuggestions() {
@@ -413,7 +418,6 @@ class PreSearchPage extends StatelessWidget {
             controller.text += "$text ";
           }
           logic.update([1, 100]);
-          _focusNode.requestFocus();
         }
 
         Widget widget;
@@ -435,6 +439,7 @@ class PreSearchPage extends StatelessWidget {
                 ),
                 trailing: const Icon(Icons.arrow_right),
                 onTap: () {
+                  _focusNode.unfocus();
                   handleAppLinks(Uri.parse(controller.text));
                 },
               );
@@ -456,6 +461,7 @@ class PreSearchPage extends StatelessWidget {
                 ),
                 trailing: const Icon(Icons.arrow_right),
                 onTap: () {
+                  _focusNode.unfocus();
                   context.to(
                     () => ComicPage(
                       sourceKey: key,
@@ -468,30 +474,33 @@ class PreSearchPage extends StatelessWidget {
 
             var subTitle = TagsTranslation.translationTagWithNamespace(
                 value.left, value.right.name);
-            return ListTile(
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(value.left),
-                  if (!showMethod)
-                    const SizedBox(
-                      width: 12,
-                    ),
-                  if (!showMethod && showTranslation)
-                    Text(
-                      subTitle,
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.outline),
-                    )
-                ],
+            return TextFieldTapRegion(
+              child: ListTile(
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(value.left),
+                    if (!showMethod)
+                      const SizedBox(
+                        width: 12,
+                      ),
+                    if (!showMethod && showTranslation)
+                      Text(
+                        subTitle,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.outline),
+                      )
+                  ],
+                ),
+                subtitle:
+                    (showMethod && showTranslation) ? Text(subTitle) : null,
+                trailing: Text(
+                  value.right.name,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                onTap: () => onSelected(value.left, value.right),
               ),
-              subtitle: (showMethod && showTranslation) ? Text(subTitle) : null,
-              trailing: Text(
-                value.right.name,
-                style: const TextStyle(fontSize: 13),
-              ),
-              onTap: () => onSelected(value.left, value.right),
             );
           }
 
@@ -550,6 +559,7 @@ class PreSearchPage extends StatelessWidget {
             label: Text(text),
             selected: logic.target == id,
             onSelected: (b) {
+              _focusNode.unfocus();
               logic.updateTarget(id);
             },
           ),
@@ -645,15 +655,231 @@ class PreSearchPage extends StatelessWidget {
     );
   }
 
-  Widget buildHistoryItem(String history, PreSearchController logic) {
+  Widget buildSourceIcon(String sourceKey) {
+    final name = ComicSource.find(sourceKey)?.name.tl ?? sourceKey;
+    const icons = {"picacg", "ehentai", "jm", "hitomi", "nhentai"};
+    return Tooltip(
+      message: name,
+      triggerMode: TooltipTriggerMode.manual,
+      child: icons.contains(sourceKey)
+          ? Image.asset(
+              "assets/search_sources/$sourceKey.png",
+              width: 18,
+              height: 18,
+              fit: BoxFit.contain,
+              semanticLabel: name,
+            )
+          : Icon(Icons.language, size: 18, semanticLabel: name),
+    );
+  }
+
+  String favoriteSourceKey(String tag) {
+    final prefix = tag.split(':').first;
+    return switch (prefix.toLowerCase()) {
+      "picacg" => "picacg",
+      "ehentai" => "ehentai",
+      "jmcomic" => "jm",
+      "hitomi" => "hitomi",
+      "htcomic" => "htmanga",
+      "nhentai" => "nhentai",
+      _ => prefix,
+    };
+  }
+
+  String favoriteKeyword(String tag) => tag.substring(tag.indexOf(':') + 1);
+
+  Future<void> editSearchFavorite(BuildContext context, {String? history}) async {
+    _focusNode.unfocus();
+    final available = {for (final source in comicSources) source.key: source};
+    final selected = <String>{
+      if (history != null)
+        ...appdata.searchSourcesFor(history).where(available.containsKey),
+    };
+    final sources = {...selected, ...available.keys};
+    var keyword = history ?? "";
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text("添加搜索收藏".tl),
+          scrollable: true,
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (history == null)
+                  TextFormField(
+                    decoration: InputDecoration(labelText: "搜索词".tl),
+                    onChanged: (text) => setState(() => keyword = text),
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                  )
+                else
+                  Text(history, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Text("漫画源".tl),
+                for (final key in sources)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Row(
+                      children: [
+                        buildSourceIcon(key),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(available[key]!.name.tl)),
+                      ],
+                    ),
+                    value: selected.contains(key),
+                    onChanged: (checked) => setState(() {
+                      if (checked == true) {
+                        selected.add(key);
+                      } else {
+                        selected.remove(key);
+                      }
+                    }),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("取消".tl),
+            ),
+            FilledButton(
+              onPressed: keyword.trim().isEmpty || selected.isEmpty
+                  ? null
+                  : () => Navigator.of(context).pop(true),
+              child: Text("收藏".tl),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (save != true || !context.mounted) return;
+
+    final term = keyword.trim();
+    final existing = appdata.favoriteTags
+        .where((tag) => favoriteKeyword(tag) == term)
+        .map(favoriteSourceKey)
+        .toSet();
+    final added = selected.difference(existing);
+    appdata.favoriteTags = {
+      for (final source in added) "$source:$term",
+      ...appdata.favoriteTags,
+    };
+    searchController.update(["favorites"]);
+    await appdata.writeHistory();
+    if (context.mounted) {
+      showToast(message: "已收藏".tl);
+    }
+  }
+
+  Future<void> pickSearchFavorite(BuildContext context) async {
+    _focusNode.unfocus();
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        constraints: const BoxConstraints(minWidth: 280, maxWidth: 400),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          primary: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text("添加搜索收藏".tl,
+                    style: const TextStyle(fontSize: 22)),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text("手动输入".tl),
+                onTap: () => Navigator.of(context).pop(false),
+              ),
+              if (appdata.searchHistory.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: Text("从历史选择".tl),
+                  onTap: () => Navigator.of(context).pop(true),
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    if (!choice) {
+      await editSearchFavorite(context);
+      return;
+    }
+
+    final history = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text("从历史选择".tl),
+        children: [
+          for (final keyword in appdata.searchHistory.reversed)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(keyword),
+              child: buildHistoryRow(keyword),
+            ),
+        ],
+      ),
+    );
+    if (history != null && context.mounted) {
+      await editSearchFavorite(context, history: history);
+    }
+  }
+
+  Widget buildHistoryRow(String keyword) {
+    final sources = appdata.searchSourcesFor(keyword);
+    const visibleSourceCount = 3;
+    final extraSources = sources.length - visibleSourceCount;
+    return Row(
+      children: [
+        Expanded(child: Text(keyword, style: const TextStyle(fontSize: 16))),
+        for (final source in sources.take(visibleSourceCount)) ...[
+          const SizedBox(width: 5),
+          buildSourceIcon(source),
+        ],
+        if (extraSources > 0) ...[
+          const SizedBox(width: 5),
+          Text("+$extraSources"),
+        ],
+      ],
+    );
+  }
+
+  Widget buildHistoryItem(
+    BuildContext pageContext,
+    String history,
+    PreSearchController logic,
+  ) {
     return Flyout(
       enableLongPress: true,
       enableSecondaryTap: true,
+      onShow: _focusNode.unfocus,
       navigator: App.navigatorKey.currentState,
       flyoutBuilder: (context) {
         return FlyoutContent(
-          title: "要删除此项目吗?".tl,
+          title: "历史搜索".tl,
           actions: [
+            FilledButton.tonal(
+              onPressed: () {
+                Navigator.of(context).pop();
+                if (pageContext.mounted) {
+                  editSearchFavorite(pageContext, history: history);
+                }
+              },
+              child: Text("收藏".tl),
+            ),
+            const SizedBox(width: 8),
             FilledButton(
               style: ButtonStyle(
                 backgroundColor: WidgetStateProperty.all(
@@ -661,12 +887,11 @@ class PreSearchPage extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                appdata.searchHistory.remove(history);
+                appdata.removeSearch(history);
                 logic.update(["history"]);
-                appdata.writeHistory();
-                App.globalBack();
+                Navigator.of(context).pop();
               },
-              child: Text("确认".tl),
+              child: Text("删除".tl),
             )
           ],
         );
@@ -677,13 +902,7 @@ class PreSearchPage extends StatelessWidget {
           width: double.infinity,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                history,
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
+            child: buildHistoryRow(history),
           ),
         ),
       ),
@@ -694,6 +913,7 @@ class PreSearchPage extends StatelessWidget {
     return Flyout(
       enableLongPress: true,
       enableSecondaryTap: true,
+      onShow: _focusNode.unfocus,
       navigator: App.navigatorKey.currentState,
       flyoutBuilder: (context) {
         return FlyoutContent(
@@ -717,21 +937,12 @@ class PreSearchPage extends StatelessWidget {
         );
       },
       child: ListTile(
-        title: Text(tag.substring(tag.indexOf(':') + 1)),
-        subtitle: Text(tag.split(':').first),
-        onTap: () {
-          String type = switch (tag.split(':').first) {
-            "Picacg" => 'picacg',
-            "EHentai" => 'ehentai',
-            "JMComic" => 'jm',
-            "hitomi" => 'hitomi',
-            "HtComic" => 'htmanga',
-            "Nhentai" => 'nhentai',
-            _ => tag.split(':').first
-          };
-          final keyword = tag.substring(tag.indexOf(':') + 1);
-          search(keyword, type);
-        },
+        title: Text(favoriteKeyword(tag)),
+        subtitle: Text(
+          ComicSource.find(favoriteSourceKey(tag))?.name.tl ??
+              tag.split(':').first,
+        ),
+        onTap: () => search(favoriteKeyword(tag), favoriteSourceKey(tag)),
       ),
     );
   }
@@ -750,8 +961,7 @@ class PreSearchPage extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                appdata.searchHistory.clear();
-                appdata.writeHistory();
+                appdata.clearSearchHistory();
                 logic.update(["history"]);
                 App.globalBack();
               },
@@ -769,7 +979,7 @@ class PreSearchPage extends StatelessWidget {
       navigator: App.navigatorKey.currentState,
       flyoutBuilder: (context) {
         return FlyoutContent(
-          title: "要清空收藏吗?".tl,
+          title: "要清空所有漫画源的收藏吗?".tl,
           actions: [
             FilledButton(
               style: ButtonStyle(
@@ -802,8 +1012,9 @@ class PreSearchPage extends StatelessWidget {
     return StateBuilder<PreSearchController>(
       id: sectionId,
       builder: (logic) {
-        final expanded =
-            history ? logic.historyExpanded : logic.favoritesExpanded;
+        final expanded = history
+            ? appdata.searchHistoryExpanded
+            : appdata.searchFavoritesExpanded;
         return SliverMainAxisGroup(
           slivers: [
             Theme(
@@ -819,6 +1030,12 @@ class PreSearchPage extends StatelessWidget {
                 title: Row(
                   children: [
                     Expanded(child: Text(history ? "历史搜索".tl : "收藏".tl)),
+                    if (!history)
+                      IconButton(
+                        tooltip: "添加搜索收藏".tl,
+                        icon: const Icon(Icons.add),
+                        onPressed: () => pickSearchFavorite(context),
+                      ),
                     Theme(
                       data: theme,
                       child: history
@@ -829,10 +1046,11 @@ class PreSearchPage extends StatelessWidget {
                 ),
                 onExpansionChanged: (expanded) {
                   if (history) {
-                    logic.historyExpanded = expanded;
+                    appdata.searchHistoryExpanded = expanded;
                   } else {
-                    logic.favoritesExpanded = expanded;
+                    appdata.searchFavoritesExpanded = expanded;
                   }
+                  appdata.writeImplicitData();
                   logic.update([sectionId]);
                 },
               ),
@@ -841,14 +1059,20 @@ class PreSearchPage extends StatelessWidget {
             if (expanded)
               history
                   ? buildHistoryList(logic, limitHistoryOnOpen)
-                  : SliverList.builder(
-                      itemCount: appdata.favoriteTags.length,
-                      itemBuilder: (context, index) => buildFavoriteItem(
-                          appdata.favoriteTags.elementAt(index), logic),
-                    ),
+                  : buildFavoriteList(logic),
           ],
         );
       },
+    );
+  }
+
+  Widget buildFavoriteList(PreSearchController logic) {
+    final favorites = appdata.favoriteTags
+        .where((tag) => favoriteSourceKey(tag) == logic.target)
+        .toList();
+    return SliverList.builder(
+      itemCount: favorites.length,
+      itemBuilder: (context, index) => buildFavoriteItem(favorites[index], logic),
     );
   }
 
@@ -870,7 +1094,11 @@ class PreSearchPage extends StatelessWidget {
             },
           ).toAlign(Alignment.center);
         }
-        return buildHistoryItem(history[history.length - index - 1], logic);
+        return buildHistoryItem(
+          context,
+          history[history.length - index - 1],
+          logic,
+        );
       },
     );
   }

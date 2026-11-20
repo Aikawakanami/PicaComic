@@ -520,12 +520,7 @@ class FavoritesPage extends StatelessWidget with _LocalFavoritesManager {
           return false;
         },
         onLongPressed: (key) {
-          if (controller.selectedComics.contains(key)) {
-            controller.selectedComics.remove(key);
-          } else {
-            controller.selectedComics.add(key);
-          }
-          controller.update();
+          controller.openComicMenuFuncs[key]?.call();
         },
       );
     }
@@ -880,7 +875,8 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
                     padding: EdgeInsets.zero,
                     physics: physic,
                     itemBuilder: (BuildContext context, int index) {
-                      var comic = comics[index];
+                      final visible = comics;
+                      var comic = visible[index];
                       var tile = LocalFavoriteTile(
                         key: ValueKey(comic.toString()),
                         comic,
@@ -896,6 +892,8 @@ class _ComicsPageViewState extends StateWithController<ComicsPageView> {
                         true,
                         onTap: () => widget.onClick(comic),
                         onLongPressed: () => widget.onLongPressed(comic),
+                        openDetails: () =>
+                            openLocalFavoriteDetails(context, visible, index),
                         showFolderInfo: true,
                         sort: options.sort,
                       );

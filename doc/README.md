@@ -9,7 +9,8 @@
 | 启动、分层、导航与状态 | [架构](architecture.md) | 组合根与宏观依赖 |
 | 实体、类型编码、SQLite、迁移 | [数据模型](data-model.md) | 身份、持久化与合并约束 |
 | 搜索到阅读、安装源、下载恢复、收藏同步 | [业务流程](business-flows.md) | 四条代表性跨模块调用链 |
-| 搜索页的历史搜索和收藏折叠 | [搜索页折叠分组](business-flows.md#搜索页折叠分组) | 两组独立开合、清空入口与列表按需构建 |
+| 搜索页折叠、历史来源和搜索收藏 | [搜索页流程](business-flows.md#搜索页折叠分组) | 两组独立开合、历史来源标识、搜索收藏按源筛选 |
+| 从漫画列表进入详情后左右切换 | [列表和详情](business-flows.md#漫画列表与详情横滑) | 浏览设置开关、跟手拖动、分页边界和多选长按菜单 |
 | JS／Dart 契约、HTTP、Cookie、代理、WebDAV | [接口与集成](api-integrations.md) | 客户端契约与外部边界 |
 | 扩展漫画源 | [漫画源模块](modules/comic-sources.md) | 注册、解析、JS 桥接与修改入口 |
 | 分页容量 1X／2X／3X | [源页合并](changes/2026-11-19-source-page-grouping.md) | 应用页映射、EH 顺序链接、部分失败与重试 |

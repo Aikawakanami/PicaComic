@@ -240,10 +240,8 @@ class HtmangaNetwork {
   }
 
   Future<Res<List<HtComicBrief>>> search(String keyword, int page) {
-    if (keyword != "") {
-      appdata.searchHistory.remove(keyword);
-      appdata.searchHistory.add(keyword);
-      appdata.writeHistory();
+    if (page == 1) {
+      appdata.recordSearch(keyword, "htmanga");
     }
     Future.delayed(const Duration(milliseconds: 300),
             () => StateController.find<PreSearchController>().update())

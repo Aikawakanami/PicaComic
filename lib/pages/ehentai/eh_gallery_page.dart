@@ -69,6 +69,7 @@ class EhGalleryPage extends BaseComicPage<Gallery> {
     var res =
         await EhNetwork().getGalleryInfo(link, appdata.settings[47] == "1");
     if (res.error && res.errorMessage == "Content Warning") {
+      if (!isActiveDetail) return res;
       bool shouldIgnore = false;
       await showDialog(
           context: App.globalContext!,
@@ -91,7 +92,7 @@ class EhGalleryPage extends BaseComicPage<Gallery> {
               ));
       if (shouldIgnore) {
         return await EhNetwork().getGalleryInfo(link, true);
-      } else if (context.mounted) {
+      } else if (isActiveDetail && context.mounted) {
         context.pop();
         return const Res(null, errorMessage: "Exit");
       }
