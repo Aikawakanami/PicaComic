@@ -11,6 +11,7 @@
 | 搜索到阅读、安装源、下载恢复、收藏同步 | [业务流程](business-flows.md) | 四条代表性跨模块调用链 |
 | 搜索页折叠、历史来源和搜索收藏 | [搜索页流程](business-flows.md#搜索页折叠分组) | 两组独立开合、历史来源标识、搜索收藏按源筛选 |
 | 从漫画列表进入详情后左右切换 | [列表和详情](business-flows.md#漫画列表与详情横滑) | 浏览设置开关、跟手拖动、分页边界和多选长按菜单 |
+| Picacg／JM 签到与 EH 每日奖励 | [前台领取实施记录](changes/2026-11-21-eh-dawn-check-in-plan.md#首版实施记录) · [后台与 Mihomo 暂缓方案](changes/2026-11-21-eh-dawn-check-in-plan.md#内置-mihomo-按需代理可行性) | 前台启动和恢复、按账号及 UTC 日去重、奖励明细与余额、Android 后台真机证据 |
 | JS／Dart 契约、HTTP、Cookie、代理、WebDAV | [接口与集成](api-integrations.md) | 客户端契约与外部边界 |
 | 扩展漫画源 | [漫画源模块](modules/comic-sources.md) | 注册、解析、JS 桥接与修改入口 |
 | 分页容量 1X／2X／3X | [源页合并](changes/2026-11-19-source-page-grouping.md) | 应用页映射、EH 顺序链接、部分失败与重试 |
@@ -49,7 +50,7 @@
 | 网络收藏关联：`lib/network/net_fav_to_local.dart`、`lib/pages/favorites/network_to_local.dart` | 未分析 | 只定位文件；源通用 `FavoriteData` 契约另有阅读 | — | 未运行 | 持续关联、拉取页数、去重与中断恢复 |
 | 图片与缓存：`lib/foundation/image_manager.dart`、`cache_manager.dart`、`image_loader/` | 部分 | `getEhImageNew / CacheManager.readCache / _evictBatches / FileImageProvider / ComicDetailCover`，及 JM／自定义图片入口 | [阅读与下载](modules/reader-download.md)、[缓存修复](changes/2026-11-18-disk-cache-capacity.md)、[封面回退](changes/2026-11-19-detail-cover-fallback.md) | Android 14 真实 EH 单页读到第 99 页，验证淘汰、回翻和重新下载；用户真机确认历史封面刷新和感叹号占位 | 真实长列表、其他源与内存压力仍待验证 |
 | 网络与会话：`lib/network/app_dio.dart`、`http_client.dart`、`cookie_jar.dart`、`cloudflare.dart`、`http_proxy.dart` | 部分 | `logDio / AppHttpAdapter.fetch / CookieManagerSql / passCloudflare / getProxy` | [接口](api-integrations.md) | 静态；未发站点请求 | 代理转发全实现、TLS 与 Cookie 标准兼容性 |
-| JM：`lib/comic_source/built_in/jm.dart`、`lib/network/jm_network/`、`lib/pages/jm/` | 部分 | `searchNew / getComicInfo / getChapter`，详情阅读与下载消费者 | [流程](business-flows.md)、[limit 实测](api-integrations.md#jm-搜索的-limit-参数实测2026-11-16) | 独立脚本已执行匿名搜索 limit 对照；详情、阅读、下载未实测 | 登录态、其他有效域名、评论、签到、全部收藏协议 |
+| JM：`lib/comic_source/built_in/jm.dart`、`lib/network/jm_network/`、`lib/pages/jm/` | 部分 | `searchNew / getComicInfo / getChapter / dailyChk`，详情阅读、下载和签到入口 | [流程](business-flows.md)、[limit 实测](api-integrations.md#jm-搜索的-limit-参数实测2026-11-16)、[签到研究](changes/2026-11-21-eh-dawn-check-in-plan.md) | 独立脚本已执行匿名搜索 limit 对照；签到为静态追踪 | 登录态、其他有效域名、评论和全部收藏协议；登录后签到实测 |
 | 其他五源：`built_in/{picacg,ehentai,hitomi,ht_manga,nhentai}.dart`、`lib/network/` 对应目录 | 部分 | 六源注册与专用 builder、网络客户端入口、ReadingData 映射 | [接口定位表](api-integrations.md#内置源定位) | 静态；未运行 | 五源完整协议、账户与全部异常分支 |
 | WebDAV／用户数据包：`lib/network/webdav.dart`、`lib/tools/io_tools.dart` | 已分析 | `uploadData / downloadData / importDataFromFile / _exportData`；校验、版本、服务恢复与单库事务边界 | [接口](api-integrations.md)、[数据](data-model.md) | 独立大库/错误重试验证通过；按用户请求完成本机备份恢复和正常界面导入；未连接 WebDAV 服务 | 并发／时钟冲突、整包原子性、可选下载目录导入 |
 | 平台工具／更新：`lib/tools/`、`lib/network/update.dart` | 部分 | `handleAppLinks / onStart / getLatestVersion` 与调用者；仅主路径 | [接口](api-integrations.md) | 静态；未运行 | 后台凭据、PDF／图片导出、通知、平台通道 |

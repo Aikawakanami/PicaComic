@@ -13,6 +13,7 @@ import 'package:pica_comic/foundation/app_page_route.dart';
 import 'package:pica_comic/foundation/log.dart';
 import 'package:pica_comic/init.dart';
 import 'package:pica_comic/network/http_client.dart';
+import 'package:pica_comic/network/eh_network/eh_dawn.dart';
 import 'package:pica_comic/pages/auth_page.dart';
 import 'package:pica_comic/pages/main_page.dart';
 import 'package:pica_comic/pages/welcome_page.dart';
@@ -121,6 +122,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         hideContent();
       } else if (state == AppLifecycleState.resumed) {
         showContent();
+        if (App.mainNavigatorKey != null) unawaited(EhDawn.onForeground());
         Future.delayed(const Duration(milliseconds: 200), checkClipboard);
       }
 

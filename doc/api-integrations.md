@@ -36,6 +36,8 @@
 | HT | `lib/comic_source/built_in/ht_manga.dart → htManga`；`lib/network/htmanga_network/htmanga_main_network.dart → HtmangaNetwork` | 域名来自 `settings[31]`，独立 HTML／账户及图片处理 |
 | NHentai | `lib/comic_source/built_in/nhentai.dart → nhentai`；`lib/network/nhentai_network/nhentai_main_network.dart → NhentaiNetwork` | 独立 session Cookie、`search / getComicInfo / getImages`；不能把废弃 `settings[48]` 当作当前域名配置 |
 
+Picacg 与 JM 的签到请求见[签到研究](changes/2026-11-21-eh-dawn-check-in-plan.md#项目现状)。E-Hentai 的主站请求、会话、代理及前台去重见[首版实施记录](changes/2026-11-21-eh-dawn-check-in-plan.md#首版实施记录)。
+
 ## JM 搜索的 limit 参数实测（2026-11-16）
 
 【已实现：静态依据】`lib/network/jm_network/jm_network.dart → JmNetwork.searchNew` 请求 `/search?&search_query=...&o=...`，第一页省略 `page`，后续页增加 `page`；现有代码未传 `limit`。域名更新遵循 `getApiDomains / tryFetchAndDecrypt`，请求头及响应解密分别依据 `headers.dart → getApiOptions` 和 `JmNetwork.convertData`。

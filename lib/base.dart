@@ -160,6 +160,7 @@ class Appdata {
     "hoursClock", //95 本地收藏阅读时长显示格式
     "1", //96 本地收藏角标跟随当前排序
     "1", //97 详情页左右滑动切换漫画
+    "0", //98 打开应用时自动领取 EH 每日奖励
   ];
 
   /// 隐式数据, 用于存储一些不需要用户设置的数据, 此数据通常为某些组件的状态, 此设置不应当被同步
@@ -391,6 +392,10 @@ Future<void> clearAppdata() async {
 }
 
 class _Settings {
+  bool get ehDawnOnOpen => appdata.settings[98] == "1";
+
+  set ehDawnOnOpen(bool value) => appdata.settings[98] = value ? "1" : "0";
+
   List<String> get _settings => appdata.settings;
 
   /// Theme color, index of [colors] (lib/foundation/def.dart)

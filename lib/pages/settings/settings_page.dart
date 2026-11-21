@@ -31,6 +31,7 @@ import '../../foundation/log.dart';
 import '../../foundation/favorite_query.dart';
 import '../../network/cookie_jar.dart';
 import '../../network/download.dart';
+import '../../network/eh_network/eh_dawn.dart';
 import '../../network/eh_network/eh_main_network.dart';
 import '../../network/http_client.dart';
 import '../../network/http_proxy.dart';
